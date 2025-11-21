@@ -4,489 +4,428 @@
 Switchboard is currently in **preview** (v0.1.0-preview.17). APIs may change between releases.
 :::
 
-Switchboard provides comprehensive validation at multiple stages to ensure your contact flows are correct before deployment. This guide covers compile-time validation (Roslyn analyzers), build-time validation, and runtime validation.
+Switchboard automatically validates your contact flows at build time to ensure they're correct before deployment. This guide explains how validation works and how to fix common validation errors.
 
-## Validation Layers
+## Automatic Validation
+
+When you build your flows using the fluent API, Switchboard runs validators automatically before generating the AWS CDK infrastructure. This catches errors early, before deployment.
 
 ```
-┌─────────────────────────────────────────┐
-│   Compile-Time (Roslyn Analyzers)       │
-│   • Queue references exist               │
-│   • Action ordering valid                │
-│   • Required parameters present          │
-│   • Type safety                          │
-└─────────────┬───────────────────────────┘
-              ↓
 ┌─────────────────────────────────────────┐
 │   Build-Time (CDK Synthesis)             │
 │   • Flow structure valid                 │
-│   • No circular dependencies             │
+│   • Terminal actions present             │
 │   • All transitions valid                │
-└─────────────┬───────────────────────────┘
-              ↓
-┌─────────────────────────────────────────┐
-│   Runtime (Dynamic Configuration)        │
-│   • Config values within bounds          │
-│   • External resources accessible        │
-│   • Lambda functions exist               │
+│   • No orphaned actions                  │
+│   • Identifiers unique                   │
 └──────────────────────────────────────────┘
 ```
 
-## Compile-Time Validation
+**Zero configuration needed** - validation runs automatically when you call `.Build()`.
 
-### Roslyn Analyzers
+## Built-In Validators
 
-Switchboard includes analyzers that validate code while you write it:
+Switchboard includes several validators that run automatically in a specific order:
 
-#### SWB001: Queue Reference Validation
+### 1. Empty Flow Validator
+**Checks:** Flow has at least one action
 
 ```csharp
-// ✅ Valid - queue exists
-[Queue("Sales")]
-[ContactFlow("SalesFlow")]
-public partial class SalesFlow
-{
-    [TransferToQueue("Sales")]  // ✅ OK
-    public partial void Transfer();
-}
+// ❌ ERROR: Flow has no actions
+var flow = new FlowBuilder()
+    .SetName("EmptyFlow")
+    .Build();  // Throws FlowValidationException
 
-// ❌ Error SWB001
-[ContactFlow("InvalidFlow")]
-public partial class InvalidFlow
-{
-    [TransferToQueue("NonExistent")]  // ❌ Queue not defined
-    public partial void Transfer();
-}
-// Error: Queue 'NonExistent' is not defined in this flow
+// ✅ VALID: Flow has actions
+var flow = new FlowBuilder()
+    .SetName("ValidFlow")
+    .PlayPrompt("Welcome")
+    .Disconnect()
+    .Build();
 ```
 
-#### SWB002: Required Parameters
-
-```csharp
-// ✅ Valid - all required params
-[GetUserInput("Enter PIN", MaxDigits = 4)]
-public partial void GetPin();
-
-// ❌ Error SWB002
-[GetUserInput(MaxDigits = 4)]  // Missing required 'Prompt'
-public partial void GetInput();
-// Error: GetUserInput requires 'Prompt' parameter
+**Error Message:**
+```
+Flow 'EmptyFlow' has no actions
 ```
 
-#### SWB003: Action Attribute Conflicts
+### 2. Terminal Action Validator
+**Checks:** Flow ends with a terminal action (Disconnect, TransferToFlow, or EndFlowExecution)
 
 ```csharp
-// ❌ Error SWB003
-[Message("Hello")]
-[TransferToQueue("Sales")]  // Can't have two actions
-public partial void Invalid();
-// Error: Multiple action attributes not allowed on same method
+// ❌ ERROR: Flow doesn't end with terminal action
+var flow = new FlowBuilder()
+    .SetName("NoTerminal")
+    .PlayPrompt("Welcome")
+    .Build();  // Throws FlowValidationException
+
+// ✅ VALID: Flow ends with Disconnect
+var flow = new FlowBuilder()
+    .SetName("WithTerminal")
+    .PlayPrompt("Welcome")
+    .Disconnect()
+    .Build();
+
+// ✅ VALID: Flow ends with TransferToQueue (which is terminal in this context)
+var flow = new FlowBuilder()
+    .SetName("QueueTransfer")
+    .PlayPrompt("Welcome")
+    .TransferToQueue("Support")
+    .Build();
 ```
 
-#### SWB004: Branch Target Validation
+::: tip Terminal Actions
+Terminal actions end the flow execution:
+- **Disconnect** - Hang up the call
+- **TransferToQueue** - Transfer to queue and end this flow
+- **TransferToFlow** - Transfer to another flow
+- **EndFlowExecution** - Explicitly end the flow
+:::
 
-```csharp
-[ContactFlow("MenuFlow")]
-public partial class MenuFlow
-{
-    // ✅ Valid - target exists
-    [GetUserInput("Press 1", MaxDigits = 1)]
-    [Branch(OnDigit = "1", Target = nameof(Sales))]
-    public partial void Menu();
-
-    [TransferToQueue("Sales")]
-    public partial void Sales();
-}
-
-[ContactFlow("InvalidMenuFlow")]
-public partial class InvalidMenuFlow
-{
-    // ❌ Error SWB004
-    [GetUserInput("Press 1", MaxDigits = 1)]
-    [Branch(OnDigit = "1", Target = nameof(NonExistent))]
-    public partial void Menu();
-    // Error: Branch target 'NonExistent' does not exist
-}
+**Error Message:**
+```
+Flow 'NoTerminal' must end with a terminal action (Disconnect, TransferToQueue, TransferToFlow, or EndFlowExecution)
 ```
 
-#### SWB005: Circular Flow Detection
+### 3. Block Structure Validator
+**Checks:**
+- All actions have unique identifiers
+- No duplicate identifiers
+- Branch actions have conditions
+- No unreachable actions
 
 ```csharp
-// ❌ Error SWB005
-[ContactFlow("CircularFlow")]
-public partial class CircularFlow
-{
-    [Message("Step 1")]
-    [Loop(Target = nameof(Step2))]
-    public partial void Step1();
-
-    [Message("Step 2")]
-    [Loop(Target = nameof(Step1))]  // Circular reference
-    public partial void Step2();
-}
-// Warning: Potential infinite loop detected
-```
-
-### Code Fixes
-
-Analyzers provide automatic fixes:
-
-```csharp
-// Before (analyzer detects issue)
-[TransferToQueue("Suport")]  // Typo
-public partial void Transfer();
-
-// Analyzer suggests:
-// 💡 Did you mean 'Support'?
-//    (Ctrl+. to apply fix)
-
-// After (auto-fixed)
-[TransferToQueue("Support")]
-public partial void Transfer();
-```
-
-## Build-Time Validation
-
-### CDK Synthesis Validation
-
-During `cdk synth`, Switchboard validates:
-
-#### Flow Structure
-
-```csharp
-[ContactFlow("ValidFlow")]
-public partial class ValidFlow
-{
-    [Message("Hello")]
-    public partial void Hello();  // ✅ Has actions
-
-    // ✅ Flow has at least one action
-}
-
-// ❌ Build error
-[ContactFlow("EmptyFlow")]
-public partial class EmptyFlow
-{
-    // ❌ No actions defined
-}
-// Error: Flow 'EmptyFlow' has no actions
-```
-
-#### Transition Validity
-
-```csharp
-// All branches must lead somewhere valid
-[GetUserInput("Press 1", MaxDigits = 1)]
-[Branch(OnDigit = "1", Target = nameof(ValidTarget))]
-[Branch(OnDigit = "2", Target = nameof(AnotherValid))]
-public partial void Menu();
-
-[TransferToQueue("Sales")]
-public partial void ValidTarget();
-
-[TransferToQueue("Support")]
-public partial void AnotherValid();
-// ✅ All branches have valid targets
-```
-
-#### Resource Dependencies
-
-```csharp
-[ContactFlow("DependentFlow")]
-[Queue("PrimaryQueue")]  // Must be defined before use
-public partial class DependentFlow
-{
-    [TransferToQueue("PrimaryQueue")]  // ✅ Queue defined
-    public partial void Transfer();
-}
-```
-
-### Custom Validators
-
-Implement custom validation logic:
-
-```csharp
-public class CustomFlowValidator : IFlowValidator
-{
-    public ValidationResult Validate(IContactFlow flow)
+// ✅ VALID: All actions are reachable and have unique IDs
+var flow = new FlowBuilder()
+    .SetName("WellStructured")
+    .PlayPrompt("Welcome")
+    .GetCustomerInput("Press 1 or 2", input =>
     {
-        var errors = new List<string>();
-
-        // Rule: All flows must have at least one queue transfer
-        var hasTransfer = flow.Actions.Any(a => a is TransferToQueueAction);
-        if (!hasTransfer)
-        {
-            errors.Add($"Flow '{flow.Name}' must have at least one queue transfer");
-        }
-
-        // Rule: Messages must be under 1000 characters
-        var longMessages = flow.Actions
-            .OfType<MessageAction>()
-            .Where(m => m.Text.Length > 1000);
-
-        foreach (var msg in longMessages)
-        {
-            errors.Add($"Message text exceeds 1000 characters");
-        }
-
-        return new ValidationResult
-        {
-            IsValid = errors.Count == 0,
-            Errors = errors
-        };
-    }
-}
-
-// Register validator
-builder.Services.AddSingleton<IFlowValidator, CustomFlowValidator>();
+        input.MaxDigits = 1;
+    })
+    .OnDigit("1", sales => sales.TransferToQueue("Sales"))
+    .OnDigit("2", support => support.TransferToQueue("Support"))
+    .Build();
 ```
 
-## Runtime Validation
-
-### Configuration Validation
-
-Validate dynamic configuration values:
+### 4. Lambda Validator
+**Checks:** InvokeLambda actions have function ARN specified
 
 ```csharp
-public class ConfigValidator : IConfigValidator
-{
-    public ValidationResult Validate(FlowConfig config)
+// ❌ ERROR: Lambda action missing FunctionArn
+var flow = new FlowBuilder()
+    .SetName("MissingLambda")
+    .InvokeLambda(lambda =>
     {
-        var errors = new List<string>();
+        // FunctionArn not set
+    })
+    .Disconnect()
+    .Build();  // Throws FlowValidationException
 
-        // Validate queue timeout
-        if (config.Parameters.TryGetValue("maxQueueTime", out var timeout))
+// ✅ VALID: Lambda has FunctionArn
+var flow = new FlowBuilder()
+    .SetName("WithLambda")
+    .InvokeLambda(lambda =>
+    {
+        lambda.FunctionArn = "arn:aws:lambda:us-east-1:123456789:function:MyFunc";
+    })
+    .Disconnect()
+    .Build();
+```
+
+### 5. Flow Graph Validator
+**Checks:**
+- No disconnected blocks
+- All transitions reference valid actions
+- No orphaned actions
+- Terminal actions don't have NextAction
+
+```csharp
+// ✅ VALID: All actions are connected
+var flow = new FlowBuilder()
+    .SetName("ConnectedFlow")
+    .PlayPrompt("Step 1")
+    .PlayPrompt("Step 2")
+    .TransferToQueue("Support")
+    .Build();
+```
+
+## Common Validation Errors
+
+### Error: "Flow has no actions"
+
+```csharp
+// ❌ Problem
+var flow = new FlowBuilder()
+    .SetName("MyFlow")
+    .Build();  // ERROR: No actions added
+
+// ✅ Solution: Add at least one action
+var flow = new FlowBuilder()
+    .SetName("MyFlow")
+    .PlayPrompt("Welcome to our contact center")
+    .Disconnect()
+    .Build();
+```
+
+### Error: "Flow must end with a terminal action"
+
+```csharp
+// ❌ Problem: Flow doesn't end properly
+var flow = new FlowBuilder()
+    .SetName("IncompleteFlow")
+    .PlayPrompt("Welcome")
+    .GetCustomerInput("Press 1", input => input.MaxDigits = 1)
+    .Build();  // ERROR: Missing terminal action
+
+// ✅ Solution 1: Add Disconnect
+var flow = new FlowBuilder()
+    .SetName("CompleteFlow")
+    .PlayPrompt("Welcome")
+    .GetCustomerInput("Press 1", input => input.MaxDigits = 1)
+    .Disconnect()
+    .Build();
+
+// ✅ Solution 2: Transfer to queue
+var flow = new FlowBuilder()
+    .SetName("TransferFlow")
+    .PlayPrompt("Welcome")
+    .TransferToQueue("Support")
+    .Build();
+
+// ✅ Solution 3: All branches must end with terminal actions
+var flow = new FlowBuilder()
+    .SetName("BranchingFlow")
+    .GetCustomerInput("Press 1 or 2", input => input.MaxDigits = 1)
+    .OnDigit("1", sales =>
+    {
+        sales.PlayPrompt("Connecting to sales")
+             .TransferToQueue("Sales");  // ✅ Terminal
+    })
+    .OnDigit("2", support =>
+    {
+        support.PlayPrompt("Connecting to support")
+               .TransferToQueue("Support");  // ✅ Terminal
+    })
+    .OnTimeout(timeout =>
+    {
+        timeout.PlayPrompt("No input received")
+               .Disconnect();  // ✅ Terminal
+    })
+    .Build();
+```
+
+### Error: "InvokeLambda action must have FunctionArn"
+
+```csharp
+// ❌ Problem: Lambda ARN not specified
+var flow = new FlowBuilder()
+    .SetName("LambdaFlow")
+    .InvokeLambda(lambda => { })  // ERROR: FunctionArn missing
+    .Disconnect()
+    .Build();
+
+// ✅ Solution: Provide Lambda ARN
+var flow = new FlowBuilder()
+    .SetName("LambdaFlow")
+    .InvokeLambda(lambda =>
+    {
+        lambda.FunctionArn = "arn:aws:lambda:us-east-1:123456789:function:CustomerLookup";
+    })
+    .Disconnect()
+    .Build();
+```
+
+### Error: "Action is not reachable"
+
+```csharp
+// ❌ Problem: Orphaned actions
+// This typically happens when manually constructing flows
+// The fluent API prevents this by design
+
+// ✅ Solution: Use fluent API properly
+var flow = new FlowBuilder()
+    .SetName("ConnectedFlow")
+    .PlayPrompt("Step 1")
+    .PlayPrompt("Step 2")  // All actions automatically connected
+    .TransferToQueue("Support")
+    .Build();
+```
+
+## Custom Validators
+
+You can create custom validators to enforce your own rules:
+
+### Implementing IFlowValidator
+
+```csharp
+using Switchboard.Validation;
+using Switchboard.Middleware;
+
+public class MinimumMessageLengthValidator : IFlowValidator
+{
+    public int Order => 100;  // Run after built-in validators
+    public bool EnabledByDefault => true;
+
+    public ValidationResult Validate(FlowContext context)
+    {
+        var result = new ValidationResult { IsValid = true };
+
+        // Find all PlayPrompt actions
+        var prompts = context.Flow.Actions.OfType<PlayPromptAction>();
+
+        foreach (var prompt in prompts)
         {
-            var timeoutValue = (int)timeout;
-            if (timeoutValue < 30 || timeoutValue > 3600)
+            if (!string.IsNullOrEmpty(prompt.Text) && prompt.Text.Length < 5)
             {
-                errors.Add("maxQueueTime must be between 30 and 3600 seconds");
+                result.AddWarning(
+                    $"Prompt text '{prompt.Text}' is very short (under 5 characters)",
+                    "CUSTOM001",
+                    $"Actions[{prompt.Identifier}].Text");
             }
         }
 
-        // Validate message length
-        if (config.Parameters.TryGetValue("welcomeMessage", out var message))
-        {
-            var messageText = message?.ToString();
-            if (string.IsNullOrWhiteSpace(messageText))
-            {
-                errors.Add("welcomeMessage cannot be empty");
-            }
-            if (messageText?.Length > 1000)
-            {
-                errors.Add("welcomeMessage exceeds 1000 character limit");
-            }
-        }
-
-        return new ValidationResult { IsValid = errors.Count == 0, Errors = errors };
+        return result;
     }
 }
 ```
 
-### Lambda Validation
-
-Validate Lambda function availability:
+### Registering Custom Validators
 
 ```csharp
-[ContactFlow("LambdaFlow")]
-public partial class LambdaFlow
+// In Program.cs
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddSwitchboard(options =>
 {
-    [InvokeLambda("CustomerLookup")]
-    [ValidateLambdaExists]  // Validates Lambda exists before invocation
-    public partial void CallLambda();
-}
+    options.InstanceName = "MyCallCenter";
+})
+.AddFlowDefinitions(typeof(Program).Assembly);
+
+// Register custom validator
+builder.Services.AddSingleton<IFlowValidator, MinimumMessageLengthValidator>();
+
+var host = builder.Build();
 ```
 
-## Validation Attributes
+### Disabling Validators
 
-### Built-In Validators
-
-```csharp
-// Validate string length
-[Message(ConfigKey = "welcomeMessage")]
-[ValidateLength(MinLength = 1, MaxLength = 1000)]
-public partial void Welcome();
-
-// Validate numeric range
-[SetAttribute("Priority", ConfigKey = "priority")]
-[ValidateRange(Min = 1, Max = 10)]
-public partial void SetPriority();
-
-// Validate pattern/regex
-[GetUserInput("Enter account number", MaxDigits = 8)]
-[ValidatePattern(@"^\d{8}$", ErrorMessage = "Must be 8 digits")]
-public partial void GetAccount();
-
-// Validate queue exists
-[TransferToQueue(ConfigKey = "queue")]
-[ValidateQueue]
-public partial void Transfer();
-
-// Validate Lambda exists
-[InvokeLambda(ConfigKey = "lambda")]
-[ValidateLambdaExists]
-public partial void CallLambda();
-```
-
-### Custom Validation Attributes
+You can disable specific validators if needed:
 
 ```csharp
-[AttributeUsage(AttributeTargets.Method)]
-public class ValidateBusinessHoursAttribute : ValidationAttribute
-{
-    public override ValidationResult Validate(object value, ValidationContext context)
-    {
-        var hours = value as string;
-        if (string.IsNullOrEmpty(hours))
-        {
-            return new ValidationResult("Business hours required");
-        }
+using Switchboard.Validation;
 
-        // Custom validation logic
-        if (!IsValidBusinessHours(hours))
-        {
-            return new ValidationResult("Invalid business hours format");
-        }
+var registry = serviceProvider.GetRequiredService<FlowValidatorRegistry>();
 
-        return ValidationResult.Success;
-    }
+// Disable a specific validator
+registry.Disable<TerminalActionValidator>();
 
-    private bool IsValidBusinessHours(string hours)
-    {
-        // Validation logic
-        return true;
-    }
-}
-
-// Usage
-[ContactFlow("BusinessFlow")]
-public partial class BusinessFlow
-{
-    [SetAttribute("Hours", ConfigKey = "businessHours")]
-    [ValidateBusinessHours]
-    public partial void SetHours();
-}
-```
-
-## Testing Validation
-
-### Unit Test Validators
-
-```csharp
-public class FlowValidatorTests
-{
-    [Fact]
-    public void Validator_ShouldRejectEmptyFlow()
-    {
-        // Arrange
-        var validator = new FlowStructureValidator();
-        var emptyFlow = new ContactFlow { Name = "Empty", Actions = new List<IAction>() };
-
-        // Act
-        var result = validator.Validate(emptyFlow);
-
-        // Assert
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.Contains("no actions"));
-    }
-
-    [Fact]
-    public void Validator_ShouldAcceptValidFlow()
-    {
-        // Arrange
-        var validator = new FlowStructureValidator();
-        var validFlow = new ContactFlow
-        {
-            Name = "Valid",
-            Actions = new List<IAction>
-            {
-                new MessageAction { Text = "Hello" },
-                new TransferToQueueAction { QueueName = "Support" }
-            }
-        };
-
-        // Act
-        var result = validator.Validate(validFlow);
-
-        // Assert
-        result.IsValid.Should().BeTrue();
-        result.Errors.Should().BeEmpty();
-    }
-}
-```
-
-### Integration Test Validation
-
-```csharp
-public class FlowValidationIntegrationTests
-{
-    [Fact]
-    public async Task Flow_ShouldFailValidation_WhenQueueDoesNotExist()
-    {
-        // Arrange
-        var app = new App();
-        var stack = new SwitchboardStack(app, "TestStack");
-
-        // Act
-        Action act = () =>
-        {
-            var flow = new InvalidFlow();  // References non-existent queue
-            flow.BuildCdkConstruct(stack);
-        };
-
-        // Assert
-        act.Should().Throw<ValidationException>()
-            .WithMessage("*Queue*not defined*");
-    }
-}
+// Enable it again
+registry.Enable<TerminalActionValidator>();
 ```
 
 ## Best Practices
 
-### 1. Validate Early
+### 1. Always End Flows with Terminal Actions
 
 ```csharp
-// ✅ Good: Compile-time validation
-[TransferToQueue("Sales")]  // Analyzer checks immediately
-public partial void Transfer();
+// ✅ Good: Clear terminal action
+var flow = new FlowBuilder()
+    .SetName("CustomerService")
+    .PlayPrompt("Welcome")
+    .TransferToQueue("Support")  // Terminal action
+    .Build();
 
-// ❌ Bad: No validation until deployment
-var queueName = config["queue"];  // Could be typo, found only at runtime
+// ✅ Good: Disconnect explicitly
+var flow = new FlowBuilder()
+    .SetName("AfterHours")
+    .PlayPrompt("We're closed")
+    .Disconnect()  // Terminal action
+    .Build();
 ```
 
-### 2. Provide Clear Error Messages
+### 2. Handle All Input Branches
 
 ```csharp
-// ✅ Good: Descriptive error
-[ValidateLength(MinLength = 1, MaxLength = 100,
-    ErrorMessage = "Welcome message must be 1-100 characters")]
-public partial void Welcome();
+// ✅ Good: All branches handled
+var flow = new FlowBuilder()
+    .SetName("Menu")
+    .GetCustomerInput("Press 1 or 2", input => input.MaxDigits = 1)
+    .OnDigit("1", sales => sales.TransferToQueue("Sales"))
+    .OnDigit("2", support => sales.TransferToQueue("Support"))
+    .OnTimeout(timeout => timeout.Disconnect())  // Don't forget timeout!
+    .Build();
 
-// ❌ Bad: Generic error
-[ValidateLength(MinLength = 1, MaxLength = 100)]
-public partial void Welcome();
-// Error: "Validation failed"
+// ❌ Bad: Timeout not handled
+var flow = new FlowBuilder()
+    .SetName("IncompleteMenu")
+    .GetCustomerInput("Press 1 or 2", input => input.MaxDigits = 1)
+    .OnDigit("1", sales => sales.TransferToQueue("Sales"))
+    .OnDigit("2", support => support.TransferToQueue("Support"))
+    // Missing OnTimeout() - what happens if customer doesn't press anything?
+    .Build();
 ```
 
-### 3. Use Multiple Validators
+### 3. Use Fluent API for Type Safety
+
+The fluent API prevents many common errors at compile time:
 
 ```csharp
-[Message(ConfigKey = "greeting")]
-[ValidateLength(MinLength = 1, MaxLength = 500)]
-[ValidatePattern(@"^[A-Za-z0-9\s,.!?]+$", ErrorMessage = "Invalid characters")]
-[ValidateNotEmpty]
-public partial void Greeting();
+// ✅ Good: Fluent API ensures proper structure
+var flow = new FlowBuilder()
+    .SetName("TypeSafe")
+    .PlayPrompt("Welcome")
+    .GetCustomerInput("Press 1", input =>
+    {
+        input.MaxDigits = 1;
+        input.TimeoutSeconds = 5;
+    })
+    .OnDigit("1", sales => sales.TransferToQueue("Sales"))
+    .OnTimeout(timeout => timeout.Disconnect())
+    .Build();
 ```
 
-### 4. Test Validation Logic
+### 4. Validate Builds in Tests
 
 ```csharp
-[Fact]
-public void CustomValidator_ShouldRejectInvalidInput()
+using Xunit;
+using FluentAssertions;
+using Switchboard;
+
+public class FlowTests
 {
-    var validator = new CustomValidator();
-    var result = validator.Validate(invalidInput);
-    result.IsValid.Should().BeFalse();
+    [Fact]
+    public void CustomerServiceFlow_ShouldBuildSuccessfully()
+    {
+        // Arrange & Act
+        var buildAction = () =>
+        {
+            var flow = new FlowBuilder()
+                .SetName("CustomerService")
+                .PlayPrompt("Welcome")
+                .TransferToQueue("Support")
+                .Build();
+        };
+
+        // Assert - should not throw
+        buildAction.Should().NotThrow();
+    }
+
+    [Fact]
+    public void EmptyFlow_ShouldFailValidation()
+    {
+        // Arrange & Act
+        var buildAction = () =>
+        {
+            var flow = new FlowBuilder()
+                .SetName("EmptyFlow")
+                .Build();  // No actions
+        };
+
+        // Assert
+        buildAction.Should().Throw<FlowValidationException>()
+            .WithMessage("*no actions*");
+    }
 }
 ```
 
@@ -495,51 +434,64 @@ public void CustomValidator_ShouldRejectInvalidInput()
 ```csharp
 try
 {
-    await configManager.UpdateAsync("Flow", config);
+    var flow = new FlowBuilder()
+        .SetName("MyFlow")
+        // ... build flow
+        .Build();
 }
-catch (ValidationException ex)
+catch (FlowValidationException ex)
 {
-    logger.LogError(ex, "Configuration validation failed");
-    // Display user-friendly error message
-    // Don't deploy invalid config
+    // Log validation errors
+    foreach (var error in ex.ValidationResult.Errors)
+    {
+        Console.WriteLine($"Validation Error: {error}");
+    }
+
+    // Don't deploy invalid flows
+    throw;
 }
 ```
 
 ## Validation Reference
 
-### Analyzer Rules
-
-| Rule | Description | Severity |
-|------|-------------|----------|
-| SWB001 | Queue reference not found | Error |
-| SWB002 | Missing required parameter | Error |
-| SWB003 | Multiple action attributes | Error |
-| SWB004 | Invalid branch target | Error |
-| SWB005 | Circular flow dependency | Warning |
-| SWB006 | Unreachable code | Warning |
-| SWB007 | Missing error handling | Warning |
-
 ### Built-In Validators
 
-| Validator | Purpose |
-|-----------|---------|
-| `ValidateLength` | String length validation |
-| `ValidateRange` | Numeric range validation |
-| `ValidatePattern` | Regex pattern matching |
-| `ValidateQueue` | Queue existence check |
-| `ValidateLambdaExists` | Lambda availability check |
-| `ValidateNotEmpty` | Non-empty string validation |
-| `ValidateEnum` | Enum value validation |
+| Validator | Order | Purpose |
+|-----------|-------|---------|
+| `EmptyFlowValidator` | -100 | Ensures flow has at least one action |
+| `TerminalActionValidator` | -90 | Ensures flow ends with terminal action |
+| `BlockStructureValidator` | 10 | Validates identifiers, reachability, branches |
+| `InvokeLambdaValidator` | 0 | Validates Lambda actions have FunctionArn |
+| `FlowGraphValidator` | 0 | Validates graph connectivity and transitions |
+
+### Terminal Actions
+
+Actions that end flow execution:
+- **Disconnect** - End the call
+- **TransferToQueue** - Transfer to queue (flow ends for this contact flow)
+- **TransferToFlow** - Transfer to another flow
+- **EndFlowExecution** - Explicitly end execution
+
+### Validation Errors Reference
+
+| Error Code | Description | Fix |
+|------------|-------------|-----|
+| EMPTY_FLOW | Flow has no actions | Add at least one action |
+| TERMINAL_ACTION | Missing terminal action | End with Disconnect, TransferToQueue, or TransferToFlow |
+| SWB104 | Lambda missing FunctionArn | Set lambda.FunctionArn |
+| SWB105 | Action missing identifier | Automatic - report as bug if seen |
+| SWB106 | Duplicate identifier | Automatic - report as bug if seen |
+| ORPHANED_ACTION | Action not reachable | Ensure all actions are connected |
 
 ## Next Steps
 
-- **[Roslyn Analyzers](/guide/advanced/analyzers)** - All analyzer rules
-- **[Source Generators](/guide/advanced/source-generators)** - Code generation details
-- **[Testing](/)** - Testing strategies
-- **[Deployment](/guide/deployment/environments)** - Pre-deployment validation
+- **[Flow Basics](/guide/flows/basics)** - Learn flow fundamentals
+- **[Customer Input Handling](/guide/flows/input-handling)** - Handle user input
+- **[Dependency Injection](/guide/advanced/dependency-injection)** - Advanced DI patterns
+- **[Middleware Pipeline](/guide/advanced/middleware)** - Customize validation pipeline
 
-## Related Resources
+## Related Examples
 
-- [Flow Basics](/guide/flows/basics) - Flow fundamentals
-- [Attribute-Based](/guide/flows/attribute-based) - Declarative flows
-- [Reference: Analyzers](/reference/analyzers) - Complete analyzer reference
+- [Minimal Setup](/examples/minimal-setup) - Simple validated flows
+- [Basic Call Center](/examples/basic-call-center) - Production-ready example
+- [IVR Menu](/examples/flows/ivr-menu) - Complex branching flows

@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'Switchboard',
   description: 'Code-first contact center Framework for Amazon Connect',
-  base: '/switchboard-docs/', // GitHub Pages path
+  base: '/', // Root path for S3/CloudFront deployment
 
   // Ignore dead links in planning documents and incomplete pages
   ignoreDeadLinks: true,
@@ -34,25 +34,30 @@ export default defineConfig({
           text: 'Core Concepts',
           items: [
             { text: 'Architecture Overview', link: '/guide/architecture' },
+            { text: 'Framework Patterns', link: '/guide/patterns' },
+            { text: 'Dynamic Configuration', link: '/guide/dynamic-configuration' },
             { text: 'Fluent API Design', link: '/guide/fluent-api' },
-            { text: 'Dynamic Configuration', link: '/guide/dynamic-configuration' }
+            { text: 'Attribute-Based Design', link: '/guide/attributes' }
           ]
         },
         {
           text: 'Building Flows',
           items: [
             { text: 'Flow Basics', link: '/guide/flows/basics' },
-            { text: 'Fluent Builders', link: '/guide/flows/fluent-builders' },
+            { text: 'Fluent API', link: '/guide/flows/fluent-builders' },
             { text: 'Customer Input Handling', link: '/guide/flows/input-handling' },
             { text: 'Speech Recognition (ASR)', link: '/guide/flows/speech-recognition' },
             { text: 'Advanced Prompts', link: '/guide/flows/prompts' },
             { text: 'Dynamic Attributes', link: '/guide/flows/dynamic-attributes' },
-            { text: 'Multi-Language Support', link: '/guide/flows/multi-language' }
+            { text: 'Attribute-Based Flows', link: '/guide/flows/attribute-based' },
+            { text: 'Flow Validation', link: '/guide/flows/validation' }
           ]
         },
         {
-          text: 'Advanced',
+          text: 'Advanced Features',
           items: [
+            { text: 'Source Generators', link: '/guide/advanced/source-generators' },
+            { text: 'Roslyn Analyzers', link: '/guide/advanced/analyzers' },
             { text: 'Dependency Injection', link: '/guide/advanced/dependency-injection' },
             { text: 'Middleware Pipeline', link: '/guide/advanced/middleware' }
           ]
@@ -81,7 +86,8 @@ export default defineConfig({
         {
           text: 'Production Examples',
           items: [
-            { text: 'Enterprise Call Center', link: '/examples/enterprise-fluent' },
+            { text: 'Enterprise (Attribute-Based)', link: '/examples/enterprise-attributes' },
+            { text: 'Enterprise (Fluent Builders)', link: '/examples/enterprise-fluent' },
             { text: 'Existing Instance Migration', link: '/examples/existing-instance' },
             { text: 'Multi-Region Deployment', link: '/examples/multi-region' },
             { text: 'High-Volume Center', link: '/examples/high-volume' }
@@ -115,18 +121,29 @@ export default defineConfig({
 
       '/reference/': [
         {
+          text: 'Core Reference',
+          items: [
+            { text: 'Attributes', link: '/reference/attributes' },
+            { text: 'Source Generators', link: '/reference/source-generators' },
+            { text: 'Roslyn Analyzers', link: '/reference/analyzers' }
+          ]
+        },
+        {
           text: 'API Reference',
           items: [
             { text: 'SwitchboardStack', link: '/reference/stack' },
             { text: 'Flow Actions', link: '/reference/flow-actions' },
+            { text: 'Configuration', link: '/reference/configuration' },
             { text: 'Input Configuration', link: '/reference/input-configuration' },
             { text: 'Prompt Configuration', link: '/reference/prompt-configuration' }
           ]
         },
         {
-          text: 'Building Blocks',
+          text: 'Extensions',
           items: [
-            { text: 'Looping (Experimental)', link: '/reference/building-blocks/looping' }
+            { text: 'Dependency Injection', link: '/reference/extensions/dependency-injection' },
+            { text: 'Assembly Scanning', link: '/reference/extensions/assembly-scanning' },
+            { text: 'Stack Extensions', link: '/reference/extensions/stack-extensions' }
           ]
         }
       ]
@@ -146,7 +163,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/nicksoftware/switchboard-docs/edit/main/docs/:path'
+      pattern: 'https://github.com/nicksoftware/AmazonConnectBuilderFramework/edit/main/docs/:path'
     }
   }
 })
