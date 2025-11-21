@@ -8,39 +8,14 @@ This guide explains the architectural design of the Switchboard framework, inclu
 
 ## High-Level Architecture
 
-Switchboard is designed as a **unified framework** with clear separation of concerns across three distinct layers:
-
-```
-┌────────────────────────────────────────────────────┐
-│         Consumer Layer (Your Code)                  │
-│  • Attributes ([ContactFlow], [Queue])              │
-│  • Fluent Builders (FlowBuilder, QueueBuilder)      │
-│  • Minimal configuration code                       │
-└────────────────┬───────────────────────────────────┘
-                 │
-┌────────────────▼───────────────────────────────────┐
-│         Framework Core (Internal)                   │
-│  • Source Generators (code generation)              │
-│  • Roslyn Analyzers (validation)                    │
-│  • CDK Constructs (infrastructure)                  │
-│  • Configuration Manager (DynamoDB)                 │
-│  • Dependency Injection (service registration)      │
-└────────────────┬───────────────────────────────────┘
-                 │
-┌────────────────▼───────────────────────────────────┐
-│         AWS Layer (Lowest Level)                    │
-│  • L1 CDK Constructs (CfnContactFlow, etc.)         │
-│  • AWS SDK (DynamoDB, S3, Lambda)                   │
-│  • Amazon Connect API                               │
-└─────────────────────────────────────────────────────┘
-```
+Switchboard is designed as a **unified framework** with clear separation of concerns across
 
 ## Layer Responsibilities
 
 ### Consumer Layer (Public API)
 
 This is what you interact with when using Switchboard. It provides two primary approaches:
-
+(Coming soon)
 **1. Attribute-Based (Declarative)**
 ```csharp
 [ContactFlow("WelcomeFlow")]
@@ -54,7 +29,7 @@ public partial class WelcomeFlow : FlowDefinitionBase
 }
 ```
 
-**2. Fluent Builders (Programmatic)**
+**2. Fluent API (Programmatic)**
 ```csharp
 var flow = new FlowBuilder()
     .SetName("WelcomeFlow")

@@ -1,221 +1,103 @@
-# Loop API Design - Fluent & Developer-Friendly
+# Looping & Retry Logic
 
-## Problem Statement
+::: danger EXPERIMENTAL FEATURE
+The looping API is currently **experimental** and undergoing active development. The API may change significantly in future releases. Use with caution in production environments.
+:::
 
-AWS Loop actions require explicit identifier references:
-```json
-{
-  "Type": "Loop",
-  "Transitions": {
-    "Conditions": [
-      {"NextAction": "get-input-id", "Condition": {"Operands": ["ContinueLooping"]}},
-      {"NextAction": "fallback-id", "Condition": {"Operands": ["DoneLooping"]}}
-    ]
-  }
-}
-```
+## Overview
 
-**Developer Experience**: Framework automatically generates Loop actions when `MaxAttempts` is specified.
+Looping allows you to retry actions when customers don't provide input or make mistakes. Common use cases:
+- Retry when customer doesn't press a digit
+- Re-prompt when invalid input is entered
+- Limit the number of attempts before transferring or disconnecting
 
-#### Usage
+## Basic Usage
+
+### Simple Retry
 
 ```csharp
 var flow = new FlowBuilder()
-    .SetName("Automatic Retry Flow")
-
+    .SetName("RetryExample")
     .GetCustomerInput("Enter your PIN", input =>
     {
         input.MaxDigits = 4;
         input.TimeoutSeconds = 5;
-        input.MaxAttempts = 3;  // ✅ Automatically generates Loop action
+        input.MaxAttempts = 3;  // Retry up to 3 times
     })
-        .OnDigit("1", valid => valid.TransferToQueue("Authenticated").Disconnect())
-        .OnTimeout(timeout =>
-        {
-            // ✅ Framework automatically handles retry (attempts 1-2)
-            // ✅ This handler only executes after 3rd failed attempt
-            timeout.PlayPrompt("Too many failed attempts. Goodbye.")
-                   .Disconnect();
-        })
-        .OnInvalidInput(invalid =>
-        {
-            invalid.PlayPrompt("Account locked. Contact support.")
-                   .Disconnect();
-        })
-        .Build();
+    .OnTimeout(timeout => {
+        timeout.PlayPrompt("No input received").Disconnect();
+    })
+    .Build();
 ```
 
-#### How It Works
+When `MaxAttempts` is set, the framework automatically:
+1. Tracks the number of attempts
+2. Re-prompts the customer
+3. Executes your timeout handler after max attempts
 
-1. **Framework detects** `MaxAttempts > 1` on GetCustomerInputAction
-2. **Automatically generates** Loop action with identifier references
-3. **Rewrites transitions** to connect timeout/invalid → Loop → GetCustomerInput
-4. **Final attempt** goes directly to timeout/invalid handlers
-
-#### Generated Flow Structure
-
-```
-GetCustomerInput (id: "get-input-1")
-  OnTimeout → Loop (id: "loop-retry-1")
-    ContinueLooping → "get-input-1" (attempts 1-2)
-    DoneLooping → timeout handler (attempt 3)
-  OnInvalidInput → Loop (id: "loop-retry-2")
-    ContinueLooping → "get-input-1"
-    DoneLooping → invalid handler
-```
-
-#### Advantages
-
-✅ **Zero boilerplate** - Developer doesn't think about Loop actions
-✅ **Automatic identifier management** - Framework handles wiring
-✅ **Intuitive API** - `MaxAttempts` naturally implies retry
-✅ **No breaking changes** - Existing code still works (MaxAttempts defaults to 1)
-
-
-
----
-
-### ⭐ Approach 2: Explicit Loop Builder (More Control)
-
-**Developer Experience**: Explicit retry configuration with fluent builder.
-
-#### Usage
+### With Retry Messages
 
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("Explicit Retry Flow")
-
-    .GetCustomerInput("Enter your PIN", input =>
-    {
-        input.MaxDigits = 4;
-        input.TimeoutSeconds = 5;
-    })
-        .WithRetry(retry =>
-        {
-            retry.MaxAttempts(3)
-                 .OnTimeout(timeout =>
-                 {
-                     timeout.PlayPrompt("Invalid PIN. Try again.");
-                 })
-                 .OnMaxAttemptsReached(maxed =>
-                 {
-                     maxed.PlayPrompt("Too many attempts. Goodbye.")
-                          .Disconnect();
-                 });
-        })
-        .OnDigit("1", valid => valid.TransferToQueue("Auth").Disconnect())
-        .Build();
-```
-
-#### How It Works
-
-1. **`.WithRetry()`** returns a `RetryBuilder`
-2. **RetryBuilder** captures retry configuration
-3. **Framework generates** Loop actions with proper wiring
-4. **`.OnMaxAttemptsReached()`** executes after final attempt
-
-#### Generated Flow Structure
-
-```
-GetCustomerInput (id: "get-input-1")
-  OnTimeout → PlayPrompt "Try again" → Loop
-    ContinueLooping → "get-input-1" (attempts 1-2)
-    DoneLooping → PlayPrompt "Too many attempts" → Disconnect
-```
-
-#### Advantages
-
-✅ **Explicit control** - Developer sees retry logic clearly
-✅ **Per-error retry messages** - Different prompts for each attempt
-✅ **Fluent API** - Natural chaining
-✅ **Optional** - Don't use if you don't need retry
-
-
----
-
-## Example: General-Support-Inbound with Automatic Loop
-
-### Before (Manual Loop - Current Issue)
-
-```csharp
-.GetCustomerInput("Press 1 for sales...", input => { })
-    .OnTimeout(timeout =>
-    {
-        // ❌ Can't reference GetCustomerInput identifier
-        timeout.Loop(3, "get-input-1", "fallback");  // Hardcoded ID
-    })
-```
-
-### After (Automatic Loop - Proposed)
-
-```csharp
-.GetCustomerInput("Press 1 for sales...", input =>
+.GetCustomerInput("Enter account number", input =>
 {
-    input.MaxAttempts = 3;  // ✅ Framework handles Loop automatically
+    input.MaxDigits = 10;
+    input.MaxAttempts = 3;
 })
-    .OnTimeout(timeout =>
-    {
-        // ✅ This only executes after 3rd attempt
-        timeout.PlayPrompt("No input. Goodbye.").Disconnect();
+.WithRetry(retry => {
+    retry.OnTimeout(t => t.PlayPrompt("Please try again"));
+})
+.OnTimeout(finalTimeout => {
+    finalTimeout.PlayPrompt("Too many attempts").Disconnect();
+})
+```
+
+This plays "Please try again" on each retry, then "Too many attempts" when max attempts is reached.
+
+## Experimental Limitations
+
+::: warning KNOWN ISSUES
+The current looping implementation has some limitations:
+
+- **Branching complexity**: Complex branching scenarios may not work as expected
+- **Nested loops**: Multiple nested retry loops are not fully tested
+- **Edge cases**: Some edge cases around max attempts may behave unexpectedly
+
+We're actively working on improving this feature. Feedback welcome!
+:::
+
+## When to Use Looping
+
+✅ **Good use cases:**
+- Simple PIN/account number entry with retry
+- Basic IVR menu with re-prompt on timeout
+- Single-level retry logic
+
+❌ **Avoid for now:**
+- Complex multi-level retries
+- Nested retry logic
+- Mission-critical flows (until API stabilizes)
+
+## Alternative Approach
+
+For production use, consider explicitly handling retries:
+
+```csharp
+// More verbose but predictable
+.GetCustomerInput("Enter PIN")
+    .OnTimeout(timeout => {
+        timeout.PlayPrompt("Let's try again")
+            .GetCustomerInput("Enter PIN again")
+            .OnTimeout(finalTimeout => {
+                finalTimeout.Disconnect();
+            })
     })
 ```
 
-### Generated JSON (Automatic)
+This approach is more verbose but gives you full control until the looping API matures.
 
-```json
-{
-  "Actions": [
-    {
-      "Identifier": "get-input-1",
-      "Type": "GetParticipantInput",
-      "Transitions": {
-        "Errors": [
-          {
-            "NextAction": "loop-retry-1",
-            "ErrorType": "InputTimeLimitExceeded"
-          }
-        ]
-      }
-    },
-    {
-      "Identifier": "loop-retry-1",
-      "Type": "Loop",
-      "Parameters": {"LoopCount": "3"},
-      "Transitions": {
-        "NextAction": "play-prompt-timeout",
-        "Conditions": [
-          {"NextAction": "get-input-1", "Condition": {"Operands": ["ContinueLooping"]}},
-          {"NextAction": "play-prompt-timeout", "Condition": {"Operands": ["DoneLooping"]}}
-        ]
-      }
-    },
-    {
-      "Identifier": "play-prompt-timeout",
-      "Type": "MessageParticipant",
-      "Parameters": {"Text": "No input. Goodbye."}
-    }
-  ]
-}
-```
+## Feedback
 
----
-
-## Developer Experience Comparison
-
-| Approach | Simplicity | Control | Verbosity | Flexibility |
-|----------|-----------|---------|-----------|-------------|
-| **Automatic (Recommended)** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ (minimal) | ⭐⭐⭐ |
-| **Explicit Retry Builder** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ (moderate) | ⭐⭐⭐⭐⭐ |
-
----
-
-## Conclusion
-
-
-**Key Benefits**:
-- ✅ Zero breaking changes
-- ✅ Intuitive API (`MaxAttempts` naturally implies retry)
-- ✅ Framework handles complexity
-- ✅ Production-ready IVR patterns
-
-
+Found an issue with looping? Please report it:
+- [GitHub Issues](https://github.com/nicksoftware/switchboard/issues)
+- Include your flow code and expected vs actual behavior
+- Help us make looping better!

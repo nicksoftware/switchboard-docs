@@ -34,10 +34,8 @@ export default defineConfig({
           text: 'Core Concepts',
           items: [
             { text: 'Architecture Overview', link: '/guide/architecture' },
-            { text: 'Framework Patterns', link: '/guide/patterns' },
-            { text: 'Dynamic Configuration', link: '/guide/dynamic-configuration' },
             { text: 'Fluent API Design', link: '/guide/fluent-api' },
-            { text: 'Attribute-Based Design', link: '/guide/attributes' }
+            { text: 'Dynamic Configuration', link: '/guide/dynamic-configuration' }
           ]
         },
         {
@@ -49,15 +47,12 @@ export default defineConfig({
             { text: 'Speech Recognition (ASR)', link: '/guide/flows/speech-recognition' },
             { text: 'Advanced Prompts', link: '/guide/flows/prompts' },
             { text: 'Dynamic Attributes', link: '/guide/flows/dynamic-attributes' },
-            { text: 'Attribute-Based Flows', link: '/guide/flows/attribute-based' },
-            { text: 'Flow Validation', link: '/guide/flows/validation' }
+            { text: 'Multi-Language Support', link: '/guide/flows/multi-language' }
           ]
         },
         {
-          text: 'Advanced Features',
+          text: 'Advanced',
           items: [
-            { text: 'Source Generators', link: '/guide/advanced/source-generators' },
-            { text: 'Roslyn Analyzers', link: '/guide/advanced/analyzers' },
             { text: 'Dependency Injection', link: '/guide/advanced/dependency-injection' },
             { text: 'Middleware Pipeline', link: '/guide/advanced/middleware' }
           ]
@@ -86,8 +81,7 @@ export default defineConfig({
         {
           text: 'Production Examples',
           items: [
-            { text: 'Enterprise (Attribute-Based)', link: '/examples/enterprise-attributes' },
-            { text: 'Enterprise (Fluent Builders)', link: '/examples/enterprise-fluent' },
+            { text: 'Enterprise Call Center', link: '/examples/enterprise-fluent' },
             { text: 'Existing Instance Migration', link: '/examples/existing-instance' },
             { text: 'Multi-Region Deployment', link: '/examples/multi-region' },
             { text: 'High-Volume Center', link: '/examples/high-volume' }
@@ -121,29 +115,18 @@ export default defineConfig({
 
       '/reference/': [
         {
-          text: 'Core Reference',
-          items: [
-            { text: 'Attributes', link: '/reference/attributes' },
-            { text: 'Source Generators', link: '/reference/source-generators' },
-            { text: 'Roslyn Analyzers', link: '/reference/analyzers' }
-          ]
-        },
-        {
           text: 'API Reference',
           items: [
             { text: 'SwitchboardStack', link: '/reference/stack' },
             { text: 'Flow Actions', link: '/reference/flow-actions' },
-            { text: 'Configuration', link: '/reference/configuration' },
             { text: 'Input Configuration', link: '/reference/input-configuration' },
             { text: 'Prompt Configuration', link: '/reference/prompt-configuration' }
           ]
         },
         {
-          text: 'Extensions',
+          text: 'Building Blocks',
           items: [
-            { text: 'Dependency Injection', link: '/reference/extensions/dependency-injection' },
-            { text: 'Assembly Scanning', link: '/reference/extensions/assembly-scanning' },
-            { text: 'Stack Extensions', link: '/reference/extensions/stack-extensions' }
+            { text: 'Looping (Experimental)', link: '/reference/building-blocks/looping' }
           ]
         }
       ]
@@ -163,7 +146,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/nicksoftware/AmazonConnectBuilderFramework/edit/main/docs/:path'
+      pattern: 'https://github.com/nicksoftware/switchboard-docs/edit/main/docs/:path'
     }
   }
 })
