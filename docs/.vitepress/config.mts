@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'Switchboard',
   description: 'Code-first contact center Framework for Amazon Connect',
-  base: '/', // Root path for S3/CloudFront deployment
+  base: '/switchboard-docs/', // GitHub Pages path
 
   // Ignore dead links in planning documents and incomplete pages
   ignoreDeadLinks: true,
