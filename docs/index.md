@@ -98,8 +98,7 @@ var flow = new FlowBuilder()
     .SetStatus("SAVED") // Use SAVED to skip validation for GetParticipantInput (AWS API limitation workaround)
      .SetContactAttributes(config =>
             {
-                // Must use actual queue ARN, not just a name
-                config["support_queue"] = "arn:aws:connect:af-south-1:561101560618:instance/ba50772c-7b52-4a34-8831-1f543c0a17a0/queue/cca10aee-7bed-42e0-bf1b-c4ba4b0ef2a4";
+                config["support_queue"] = "support";
             })
     // 1. Welcome message (SSML)
     .PlayPrompt(message =>
