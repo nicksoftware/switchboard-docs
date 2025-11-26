@@ -45,23 +45,122 @@ features:
 ## Quick Example
 
 ```csharp
-var app = new App();
 
-var connectApp = new ConnectApplicationStack(app, "CallCenter", new ConnectAppProps
+var app = new SwitchboardApp();
+var uniqueAlias = "switchboard-demo-66890";
+var callCenter = app.CreateCallCenter("SimpleCallCenter", uniqueAlias);
+
+
+// 1. Create business hours (Mon-Fri 9am-5pm)
+var businessHours = new HoursOfOperation
 {
-    InstanceName = "MyContactCenter",
-    Environment = "production"
-});
+    Name = "BusinessHours",
+    TimeZone = "America/New_York"
+};
 
-connectApp
-    .AddQueue("Sales")
-    .AddFlow("SalesInbound", flow =>
+for (var day = DayOfWeek.Monday; day <= DayOfWeek.Friday; day++)
+{
+    businessHours.AddDayConfig(new HoursOfOperationConfig
     {
-        flow.WelcomeMessage = "Thank you for calling sales";
-        flow.QueueTransfer("Sales");
+        Day = day,
+        StartTime = new TimeRange { Hours = 9, Minutes = 0 },
+        EndTime = new TimeRange { Hours = 17, Minutes = 0 }
     });
+}
+
+callCenter
+.AddHoursOfOperation(businessHours);
+
+// 2. Create queues
+var salesQueue = new QueueBuilder()
+    .SetName(AcmeQueues.Sales)
+    .SetDescription("Sales inquiries queue")
+    .SetMaxContacts(50)
+    .AddTag("Department", "Sales")
+    .Build();
+
+var supportQueue = new QueueBuilder()
+    .SetName(AcmeQueues.Support)
+    .SetDescription("Technical support queue")
+    .SetMaxContacts(100)
+    .AddTag("Department", "Support")
+    .Build();
+
+
+callCenter.AddQueue(salesQueue, businessHours.Name);
+callCenter.AddQueue(supportQueue, businessHours.Name);
+
+var flow = new FlowBuilder()
+    .SetName("General Support Inbound")
+    .SetType(FlowType.ContactFlow)
+    .SetDescription("Verifying stable construct IDs prevent resource replacement!")
+    .AddTag("Department", "Support")
+    .SetStatus("SAVED") // Use SAVED to skip validation for GetParticipantInput (AWS API limitation workaround)
+     .SetContactAttributes(config =>
+            {
+                // Must use actual queue ARN, not just a name
+                config["support_queue"] = "arn:aws:connect:af-south-1:561101560618:instance/ba50772c-7b52-4a34-8831-1f543c0a17a0/queue/cca10aee-7bed-42e0-bf1b-c4ba4b0ef2a4";
+            })
+    // 1. Welcome message (SSML)
+    .PlayPrompt(message =>
+    {
+        message.PromptType = PromptType.SSML;
+        message.SSML = "<speak>\nWelcome to the Nicksoftware general support line. We are looking forward to supporting you.\n</speak>";
+    })
+
+    // 2. Main menu with GetCustomerInput
+    .GetCustomerInput("For General Enquiries, press 1. For software support, press 2. For cloud support, press 3. To speak to an agent, press 4.", input =>
+    {
+        input.TimeoutSeconds = 5;
+        input.EncryptInput = false;
+        input.MaxDigits = 1;
+    })
+    .OnDefault(deflt => deflt.Disconnect())
+    .OnTimeout(timeout => timeout.Disconnect())
+    .OnError(error => error.Disconnect())
+    .OnDigit("1", generalEnquiries =>
+    {
+        generalEnquiries
+            .PlayPrompt("Your call is important to us please wait while we transfer you to our support agents")
+             .TransferToQueueDynamic("$.Attributes.support_queue")
+            .Disconnect();
+    })
+    // Digit 2: Software Support → Support queue
+    .OnDigit("2", softwareSupport =>
+    {
+        softwareSupport
+            .PlayPrompt("Your call is important to us please wait while we transfer you to our support agents")
+            .TransferToQueueDynamic("$.Attributes.support_queue")
+            .Disconnect();
+    })
+    // Digit 3: Temporarily removed TransferToThirdParty to test
+    .OnDigit("3", cloudSupport =>
+    {
+        cloudSupport
+            .PlayPrompt("Your call is important to us please wait while we transfer you to our cloud support specialists")
+            .TransferToThirdParty("+18005550199") // Example number
+            .Disconnect();
+    })
+    // Digit 4: Speak to Agent → Support queue
+    .OnDigit("4", speakToAgent =>
+    {
+        speakToAgent
+            .PlayPrompt("Your call is important to us please wait while we transfer you to our support agents")
+            .TransferToQueueDynamic("$.Attributes.support_queue")
+            .Disconnect();
+    })
+    .Disconnect()
+    .Build();
+
+callCenter.AddFlow(flow);
 
 app.Synth();
+
+public class AcmeQueues
+{
+    public const string Sales = "A-Sales";
+    public const string Support = "A-Support";
+};
 
 ```
 
