@@ -167,7 +167,7 @@ public class AcmeQueues
 ## Installation
 
 ```bash
-dotnet add package NickSoftware.Switchboard --version 0.1.0-preview.17
+dotnet add package NickSoftware.Switchboard --prerelease
 npm install -g aws-cdk
 ```
 

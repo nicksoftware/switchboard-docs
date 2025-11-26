@@ -27,7 +27,7 @@ dotnet new console -n MyConnectApp -f net10.0
 
 ```bash
 # Install the framework package (preview version)
-dotnet add package NickSoftware.Switchboard --version 0.1.0-preview.17
+dotnet add package NickSoftware.Switchboard --prerelease
 
 # Install AWS CDK CLI globally
 npm install -g aws-cdk
@@ -74,7 +74,7 @@ using Switchboard;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Configure Switchboard 
+// Configure Switchboard
 builder.Services.AddSwitchboard(options =>
 {
     options.InstanceName = "MyCallCenter";
@@ -151,6 +151,7 @@ dotnet --version  # Should be 10.0 or higher
 ### Deployment Errors
 
 Check IAM permissions. Your user/role needs permissions for:
+
 - CloudFormation
 - Amazon Connect
 - IAM role creation

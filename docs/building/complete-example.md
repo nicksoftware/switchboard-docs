@@ -42,7 +42,7 @@ dotnet new console -n MyContactCenter
 cd MyContactCenter
 
 # Install Switchboard (when published to NuGet)
-dotnet add package NickSoftware.Switchboard --version 0.1.0-preview.17
+dotnet add package NickSoftware.Switchboard --prerelease
 
 # Install AWS CDK
 dotnet add package Amazon.CDK.Lib --version 2.170.0
@@ -396,6 +396,7 @@ cdk deploy
 ```
 
 **Deployment Process:**
+
 1. CDK creates CloudFormation template
 2. CloudFormation creates Amazon Connect resources:
    - Connect instance
@@ -441,6 +442,7 @@ Since user creation isn't implemented yet, create agents manually:
 3. **Create agents:**
 
 **Sales Agent:**
+
 - Username: `sales.agent1`
 - First Name: `Sales`
 - Last Name: `Agent 1`
@@ -449,6 +451,7 @@ Since user creation isn't implemented yet, create agents manually:
 - Security Profile: `Agent`
 
 **Support Agent:**
+
 - Username: `support.agent1`
 - First Name: `Support`
 - Last Name: `Agent 1`
@@ -457,6 +460,7 @@ Since user creation isn't implemented yet, create agents manually:
 - Security Profile: `Agent`
 
 **Billing Agent:**
+
 - Username: `billing.agent1`
 - First Name: `Billing`
 - Last Name: `Agent 1`
@@ -482,6 +486,7 @@ Since user creation isn't implemented yet, create agents manually:
 ### Test Agent Experience
 
 1. **Have agents log into CCP:**
+
    - URL: `https://[instance-alias].my.connect.aws/ccp-v2/`
    - Credentials: From user creation
 
@@ -498,13 +503,13 @@ Since user creation isn't implemented yet, create agents manually:
 
 ### Infrastructure Summary
 
-| Resource Type | Count | Names |
-|---------------|-------|-------|
-| **Instance** | 1 | acme-support-center |
-| **Hours of Operation** | 2 | BusinessHours, Emergency24x7 |
-| **Queues** | 6 | SalesVIP, SalesStandard, SupportVIP, SupportStandard, Billing, EmergencySupport |
-| **Routing Profiles** | 5 | VIPSalesAgent, SalesAgent, SupportAgent, BillingSpecialist, EmergencyAgent |
-| **Contact Flows** | 5 | MainMenuFlow, SalesFlow, SupportFlow, BillingFlow, EmergencyFlow, AfterHoursFlow |
+| Resource Type          | Count | Names                                                                            |
+| ---------------------- | ----- | -------------------------------------------------------------------------------- |
+| **Instance**           | 1     | acme-support-center                                                              |
+| **Hours of Operation** | 2     | BusinessHours, Emergency24x7                                                     |
+| **Queues**             | 6     | SalesVIP, SalesStandard, SupportVIP, SupportStandard, Billing, EmergencySupport  |
+| **Routing Profiles**   | 5     | VIPSalesAgent, SalesAgent, SupportAgent, BillingSpecialist, EmergencyAgent       |
+| **Contact Flows**      | 5     | MainMenuFlow, SalesFlow, SupportFlow, BillingFlow, EmergencyFlow, AfterHoursFlow |
 
 ### Features Implemented
 
@@ -523,21 +528,25 @@ Since user creation isn't implemented yet, create agents manually:
 ### Enhancements to Consider
 
 1. **Add Lambda Functions**
+
    - Customer lookup for VIP detection
    - CRM integration
    - Intelligent routing based on customer data
 
 2. **Add Queue Flows**
+
    - Custom hold music per queue
    - Estimated wait time announcements
    - Callback offers
 
 3. **Add Metrics and Dashboards**
+
    - Real-time queue metrics
    - Agent performance tracking
    - Historical reporting
 
 4. **Implement Advanced Routing**
+
    - Skill-based routing
    - Time-of-day routing
    - Dynamic queue priority
@@ -560,6 +569,7 @@ cdk destroy
 ```
 
 **Warning:** This will delete all resources including:
+
 - Contact flows
 - Queues
 - Routing profiles
@@ -567,6 +577,7 @@ cdk destroy
 - The Connect instance itself
 
 **Before destroying:**
+
 - Export any important data
 - Download call recordings
 - Save configuration for reference

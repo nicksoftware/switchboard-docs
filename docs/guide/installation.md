@@ -9,6 +9,7 @@ Switchboard is currently in **preview** (v0.1.0-preview.17). The installation pr
 Before installing Switchboard, ensure you have:
 
 ### Required
+
 - **.NET 10 SDK** or later ([Download](https://dotnet.microsoft.com/download))
 - **Node.js 20+** (for AWS CDK CLI) ([Download](https://nodejs.org/))
 - **AWS Account** with appropriate permissions
@@ -48,7 +49,7 @@ cd MyContactCenter
 
 ```bash
 # Install the preview version
-dotnet add package NickSoftware.Switchboard --version 0.1.0-preview.17
+dotnet add package NickSoftware.Switchboard --prerelease
 ```
 
 ### 3. Install AWS CDK CLI
@@ -94,6 +95,7 @@ Create a `cdk.json` file in your project root:
 Create a simple test file to verify everything is working:
 
 **Program.cs**:
+
 ```csharp
 using Amazon.CDK;
 using Microsoft.Extensions.Hosting;
@@ -135,6 +137,7 @@ Your AWS user/role needs these permissions:
 ### Example IAM Policy
 
 For development/testing, you can use these managed policies:
+
 - `AmazonConnectFullAccess`
 - `IAMFullAccess`
 - `AWSCloudFormationFullAccess`
@@ -165,7 +168,7 @@ To upgrade to a newer version:
 
 ```bash
 # Update to specific version
-dotnet add package NickSoftware.Switchboard --version 0.1.0-preview.17
+dotnet add package NickSoftware.Switchboard --prerelease
 
 # Or update to latest
 dotnet add package NickSoftware.Switchboard
@@ -180,6 +183,7 @@ Install the .NET SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/do
 ### "cdk: command not found"
 
 Install the AWS CDK CLI:
+
 ```bash
 npm install -g aws-cdk
 ```
@@ -191,6 +195,7 @@ Make sure you've called `AddSwitchboard()` in your service configuration.
 ### CDK Bootstrap Errors
 
 Ensure your AWS credentials have CloudFormation and S3 permissions:
+
 ```bash
 aws sts get-caller-identity
 ```
@@ -198,6 +203,7 @@ aws sts get-caller-identity
 ### Package Not Found
 
 The alpha packages are published to NuGet.org. Ensure you have internet connectivity and try:
+
 ```bash
 dotnet nuget locals all --clear
 dotnet restore

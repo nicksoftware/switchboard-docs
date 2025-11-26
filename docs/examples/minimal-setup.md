@@ -55,7 +55,7 @@ public partial class WelcomeFlow : FlowDefinitionBase
 ```bash
 dotnet new console -n SimpleCallCenter -f net10.0
 cd SimpleCallCenter
-dotnet add package NickSoftware.Switchboard --version 0.1.0-preview.17
+dotnet add package NickSoftware.Switchboard --prerelease
 
 # Add the files above
 
@@ -352,6 +352,7 @@ MyCallCenter/
 ```
 
 **Program.cs**:
+
 ```csharp
 using Amazon.CDK;
 using Microsoft.Extensions.Hosting;
@@ -372,6 +373,7 @@ app.Synth();
 ```
 
 **appsettings.json**:
+
 ```json
 {
   "Connect": {
@@ -382,6 +384,7 @@ app.Synth();
 ```
 
 **cdk.json**:
+
 ```json
 {
   "app": "dotnet run",
@@ -395,21 +398,22 @@ app.Synth();
 
 ## Comparison: Minimal vs Production
 
-| Feature | Minimal Setup | Production Setup |
-|---------|---------------|------------------|
-| **Files** | 3-5 files | 20+ files |
-| **Configuration** | Hardcoded | appsettings.json + env vars |
-| **Flows** | 1-2 flows | 10+ flows with modules |
-| **Queues** | 1-2 queues | Multiple with routing profiles |
-| **Lambda** | Optional | Multiple for business logic |
-| **Monitoring** | Default CloudWatch | Custom dashboards + alarms |
-| **Security** | Basic | VPC, encryption, least privilege |
-| **CI/CD** | Manual deployment | GitHub Actions pipeline |
-| **Deployment Time** | 5 minutes | 1-2 hours setup |
+| Feature             | Minimal Setup      | Production Setup                 |
+| ------------------- | ------------------ | -------------------------------- |
+| **Files**           | 3-5 files          | 20+ files                        |
+| **Configuration**   | Hardcoded          | appsettings.json + env vars      |
+| **Flows**           | 1-2 flows          | 10+ flows with modules           |
+| **Queues**          | 1-2 queues         | Multiple with routing profiles   |
+| **Lambda**          | Optional           | Multiple for business logic      |
+| **Monitoring**      | Default CloudWatch | Custom dashboards + alarms       |
+| **Security**        | Basic              | VPC, encryption, least privilege |
+| **CI/CD**           | Manual deployment  | GitHub Actions pipeline          |
+| **Deployment Time** | 5 minutes          | 1-2 hours setup                  |
 
 ## When to Use Each
 
 ### Use Minimal Setup When:
+
 - ✅ Learning the framework
 - ✅ Prototyping
 - ✅ Simple use cases (1-2 queues)
@@ -417,6 +421,7 @@ app.Synth();
 - ✅ Development environment
 
 ### Use Production Setup When:
+
 - ✅ Customer-facing deployment
 - ✅ Multiple environments (dev/staging/prod)
 - ✅ Complex routing logic
