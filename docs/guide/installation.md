@@ -48,8 +48,8 @@ cd MyContactCenter
 ### 2. Install Switchboard Framework
 
 ```bash
-# Install the preview version
-dotnet add package NickSoftware.Switchboard --prerelease
+# Install the framework
+dotnet add package NickSoftware.Switchboard
 ```
 
 ### 3. Install AWS CDK CLI
@@ -97,20 +97,20 @@ Create a simple test file to verify everything is working:
 **Program.cs**:
 
 ```csharp
-using Amazon.CDK;
-using Microsoft.Extensions.Hosting;
-using Switchboard;
+using Switchboard.Core;
+using Switchboard.Resources.Queue;
 
-var builder = Host.CreateApplicationBuilder(args);
+var app = new SwitchboardApp();
 
-builder.Services.AddSwitchboard(options =>
-{
-    options.InstanceName = "TestCallCenter";
-    options.Region = "us-east-1";
-});
+// Create a new Connect instance
+var stack = app.CreateCallCenter("TestCallCenter", "test-call-center");
 
-var host = builder.Build();
-var app = host.Services.GetRequiredService<ISwitchboardApp>();
+// Add a simple queue
+var queue = Queue.Create("TestQueue")
+    .SetDescription("Test queue")
+    .Build();
+stack.AddQueue(queue, "24x7");
+
 app.Synth();
 ```
 
@@ -146,31 +146,37 @@ For production, use a least-privilege custom policy.
 
 ## Optional Dependencies
 
-### Source Generators Package
+::: info FUTURE FEATURE
+The source generators and analyzers packages are planned for a future release. They will provide:
+
+- Attribute-based flow definitions
+- Compile-time validation of flows and queue references
+  :::
+
+<!--
+### Source Generators Package (Coming Soon)
 
 For advanced attribute-based code generation:
 
 ```bash
-dotnet add package NickSoftware.Switchboard.SourceGenerators --version 0.1.0-preview.17
+dotnet add package NickSoftware.Switchboard.SourceGenerators
 ```
 
-### Analyzers Package
+### Analyzers Package (Coming Soon)
 
 For compile-time validation:
 
 ```bash
-dotnet add package NickSoftware.Switchboard.Analyzers --version 0.1.0-preview.17
+dotnet add package NickSoftware.Switchboard.Analyzers
 ```
+-->
 
 ## Upgrading
 
 To upgrade to a newer version:
 
 ```bash
-# Update to specific version
-dotnet add package NickSoftware.Switchboard --prerelease
-
-# Or update to latest
+# Update to latest version
 dotnet add package NickSoftware.Switchboard
 ```
 
@@ -187,10 +193,6 @@ Install the AWS CDK CLI:
 ```bash
 npm install -g aws-cdk
 ```
-
-### "Unable to resolve service 'ISwitchboardApp'"
-
-Make sure you've called `AddSwitchboard()` in your service configuration.
 
 ### CDK Bootstrap Errors
 
@@ -217,6 +219,6 @@ dotnet restore
 
 ## Getting Help
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/nicksoftware/AmazonConnectBuilderFramework/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/nicksoftware/AmazonConnectBuilderFramework/discussions)
-- 📧 **Email**: nicolusmaluleke@gmail.com
+- 🐛 **Issues**: [GitHub Issues](https://github.com/nicksoftware/switchboard-docs/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/nicksoftware/switchboard-docs/discussions)
+- 📧 **Email**: nicolas@nicksoftware.co.za

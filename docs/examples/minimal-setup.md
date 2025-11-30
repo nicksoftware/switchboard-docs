@@ -1,10 +1,6 @@
 # Minimal Setup Examples
 
-::: warning ALPHA RELEASE
-These examples use Switchboard **v0.1.0-preview.17**. The API may change before the stable 1.0 release.
-:::
-
-Simple, focused examples to get started quickly. Each example shows the absolute minimum code needed.
+Simple, focused examples to get started quickly. Each example shows the absolute minimum code needed using the fluent API.
 
 ## Example 1: Single Queue with Welcome Message
 
@@ -14,39 +10,70 @@ Simple, focused examples to get started quickly. Each example shows the absolute
 
 ```csharp
 // Program.cs
-using Amazon.CDK;
-using Microsoft.Extensions.Hosting;
-using Switchboard;
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.HoursOfOperation;
+using Switchboard.Resources.Queue;
 
-var builder = Host.CreateApplicationBuilder(args);
+var app = new SwitchboardApp();
 
-builder.Services.AddSwitchboard(options =>
-{
-    options.InstanceName = "SimpleCallCenter";
-    options.Region = "us-east-1";
-})
-.AddFlowDefinitions(typeof(Program).Assembly);
+// Create a new Connect instance
+var stack = app.CreateCallCenter("SimpleCallCenter", "simple-call-center");
 
-var host = builder.Build();
-var app = host.Services.GetRequiredService<ISwitchboardApp>();
+// Create business hours
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
+
+// Create a queue
+var queue = Queue.Create("Support")
+    .SetDescription("Customer support queue")
+    .SetMaxContacts(50)
+    .Build();
+stack.AddQueue(queue, "BusinessHours");
+
+// Create a simple welcome flow
+var flow = Flow.Create("WelcomeFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome! Connecting you to our team.")
+    .TransferToQueue("Support")
+    .Disconnect()
+    .Build();
+stack.AddFlow(flow);
+
 app.Synth();
 ```
 
-```csharp
-// SimpleFlow.cs
-using Switchboard;
-using Switchboard.Attributes;
+### CDK
 
-[ContactFlow("WelcomeFlow")]
-public partial class WelcomeFlow : FlowDefinitionBase
+create a cdk.json file
+
+```json
 {
-    [Action(Order = 1)]
-    [Message("Welcome! Connecting you to our team.")]
-    public partial void Welcome();
-
-    [Action(Order = 2)]
-    [TransferToQueue("Support")]
-    public partial void Transfer();
+  "app": "dotnet run --project <PROJECT_NAME>.csproj",
+  "watch": {
+    "include": ["**"],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "**/*.d.ts",
+      "**/*.js",
+      "node_modules",
+      "bin",
+      "obj"
+    ]
+  },
+  "context": {
+    "@aws-cdk/aws-apigateway:usagePlanKeyOrderInsensitiveId": true,
+    "@aws-cdk/core:stackRelativeExports": true,
+    "@aws-cdk/aws-rds:lowercaseDbIdentifier": true,
+    "@aws-cdk/aws-lambda:recognizeVersionProps": true,
+    "@aws-cdk/aws-cloudfront:defaultSecurityPolicyTLSv1.2_2021": true,
+    "@aws-cdk/core:target-partitions": ["aws", "aws-cn"]
+  }
 }
 ```
 
@@ -55,9 +82,9 @@ public partial class WelcomeFlow : FlowDefinitionBase
 ```bash
 dotnet new console -n SimpleCallCenter -f net10.0
 cd SimpleCallCenter
-dotnet add package NickSoftware.Switchboard --prerelease
+dotnet add package NickSoftware.Switchboard
 
-# Add the files above
+# Add the Program.cs file above
 
 # Create cdk.json
 echo '{"app":"dotnet run"}' > cdk.json
@@ -74,262 +101,308 @@ cdk deploy
 **What it does**: Simple menu - press 1 for Sales, press 2 for Support.
 
 ```csharp
-[ContactFlow("MainMenu")]
-public partial class MainMenuFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message("Welcome to our call center")]
-    public partial void Welcome();
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.HoursOfOperation;
+using Switchboard.Resources.Queue;
 
-    [Action(Order = 2)]
-    [GetCustomerInput]
-    [Text("For sales, press 1. For support, press 2.")]
-    [MaxDigits(1)]
-    [Timeout(5)]
-    public partial Task<string> GetChoice();
+var app = new SwitchboardApp();
+var stack = app.CreateCallCenter("IVRExample", "ivr-example");
 
-    [Action(Order = 3)]
-    [Branch(nameof(GetChoice))]
-    public partial void RouteCall()
+// Create hours and queues
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
+
+var salesQueue = Queue.Create("Sales").Build();
+stack.AddQueue(salesQueue, "BusinessHours");
+
+var supportQueue = Queue.Create("Support").Build();
+stack.AddQueue(supportQueue, "BusinessHours");
+
+// Create IVR menu flow
+var flow = Flow.Create("MainMenu")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome to our call center")
+    .GetCustomerInput("For sales, press 1. For support, press 2.", input =>
     {
-        OnDigit("1", () => TransferToQueue("Sales"));
-        OnDigit("2", () => TransferToQueue("Support"));
-        OnTimeout(() => PlayMessage("No input received") + TransferToQueue("Support"));
-    }
-}
+        input.TimeoutSeconds = 5;
+    })
+    .OnDigit("1", sales => sales
+        .PlayPrompt("Connecting you to sales...")
+        .TransferToQueue("Sales"))
+    .OnDigit("2", support => support
+        .PlayPrompt("Connecting you to support...")
+        .TransferToQueue("Support"))
+    .OnTimeout(timeout => timeout
+        .PlayPrompt("No input received. Transferring to support.")
+        .TransferToQueue("Support"))
+    .OnError(error => error.Disconnect())
+    .OnDefault(def => def.Disconnect())
+    .Build();
+stack.AddFlow(flow);
+
+app.Synth();
 ```
 
 **Result**: Callers can select between two queues.
 
 ---
 
-## Example 3: Business Hours Check
+## Example 3: Using an Existing Connect Instance
 
-**What it does**: Route to queue during business hours, play closed message after hours.
+**What it does**: Add resources to an existing Amazon Connect instance without creating a new one.
 
 ```csharp
-[ContactFlow("BusinessHoursFlow")]
-public partial class BusinessHoursFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message("Thank you for calling")]
-    public partial void Welcome();
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.Queue;
 
-    [Action(Order = 2)]
-    [CheckHoursOfOperation("BusinessHours")]
-    public partial void CheckHours()
-    {
-        OnOpen(() => TransferToQueue("Support"));
-        OnClosed(() => PlayClosedMessage());
-    }
+var app = new SwitchboardApp();
 
-    [Action(Order = 3)]
-    [Sequence]
-    public partial void PlayClosedMessage()
-    {
-        PlayMessage("We are currently closed. Please call back during business hours.");
-        Disconnect();
-    }
-}
+// Use an existing Connect instance by ARN
+var stack = app.UseExistingCallCenter(
+    "MyStack",
+    "arn:aws:connect:us-east-1:123456789012:instance/abc-123",
+    "my-existing-call-center"
+);
+
+// Add new queue to existing instance
+var queue = Queue.Create("NewSalesQueue")
+    .SetDescription("New sales queue")
+    .SetMaxContacts(100)
+    .Build();
+stack.AddQueue(queue, "BusinessHours");
+
+// Add new flow to existing instance
+var flow = Flow.Create("NewFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome to our new service!")
+    .TransferToQueue("NewSalesQueue")
+    .Disconnect()
+    .Build();
+stack.AddFlow(flow);
+
+app.Synth();
 ```
 
-**Result**: Smart routing based on time of day.
+**Result**: New resources added to your existing Connect instance.
 
 ---
 
-## Example 4: Customer Authentication
+## Example 4: Customer Authentication with Lambda
 
 **What it does**: Ask for account number, validate via Lambda, transfer to appropriate queue.
 
 ```csharp
-[ContactFlow("AuthFlow")]
-public partial class AuthFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message("Please enter your account number")]
-    public partial void Prompt();
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.HoursOfOperation;
+using Switchboard.Resources.Queue;
 
-    [Action(Order = 2)]
-    [GetCustomerInput]
-    [AttributeName("AccountNumber")]
-    [MaxDigits(10)]
-    [EncryptInput(true)]
-    public partial Task<string> GetAccountNumber();
+var app = new SwitchboardApp();
+var stack = app.CreateCallCenter("AuthExample", "auth-example");
 
-    [Action(Order = 3)]
-    [InvokeLambda("ValidateAccount")]
-    [InputParameter("accountNumber", AttributeRef = "AccountNumber")]
-    public partial Task<ValidationResult> Validate();
+// Create hours and queue
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
 
-    [Action(Order = 4)]
-    [Branch(nameof(Validate))]
-    public partial void HandleResult()
+var queue = Queue.Create("Support").Build();
+stack.AddQueue(queue, "BusinessHours");
+
+// Lambda ARN for account validation
+// Note: Create Lambda using AWS CDK directly, then reference the ARN here
+var validateLambdaArn = "arn:aws:lambda:us-east-1:123456789012:function:validate-account";
+
+// Create authentication flow
+var flow = Flow.Create("AuthFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Please enter your account number followed by the pound key.")
+    .StoreCustomerInput("Enter your account number", input =>
     {
-        OnSuccess(() => WelcomeCustomer());
-        OnError(() => TransferToAgent());
-    }
+        input.MaxDigits = 10;
+        input.EncryptEntry = true;
+    })
+    .OnSuccess(success => success
+        .InvokeLambda(validateLambdaArn, "validate-account")
+        .OnSuccess(valid => valid
+            .PlayPrompt("Welcome back! Connecting you to support.")
+            .TransferToQueue("Support"))
+        .OnError(invalid => invalid
+            .PlayPrompt("Account not found. Please try again.")
+            .Disconnect()))
+    .OnError(error => error
+        .PlayPrompt("Invalid input. Goodbye.")
+        .Disconnect())
+    .Build();
+stack.AddFlow(flow);
 
-    [Action(Order = 5)]
-    [Message("Welcome back! Connecting you now.")]
-    public partial void WelcomeCustomer();
-}
-```
-
-**Lambda Function** (minimal):
-
-```csharp
-// ValidateAccountFunction/Function.cs
-public class Function
-{
-    public async Task<ValidationResult> FunctionHandler(
-        ConnectLambdaRequest request,
-        ILambdaContext context)
-    {
-        var accountNumber = request.Parameters["accountNumber"].ToString();
-
-        // Simple validation - in real app, check database
-        var isValid = accountNumber.Length == 10 && accountNumber.All(char.IsDigit);
-
-        return new ValidationResult
-        {
-            IsValid = isValid,
-            CustomerName = isValid ? "John Doe" : null
-        };
-    }
-}
-
-public class ValidationResult
-{
-    public bool IsValid { get; set; }
-    public string CustomerName { get; set; }
-}
+app.Synth();
 ```
 
 **Result**: Secure customer authentication with Lambda.
 
 ---
 
-## Example 5: Callback Flow
+## Example 5: Complete Setup with Fluent API
 
-**What it does**: Offer callback instead of waiting in queue.
+**What it does**: Demonstrates the recommended pattern for adding all resources.
 
 ```csharp
-[ContactFlow("CallbackFlow")]
-public partial class CallbackFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message("All agents are busy")]
-    public partial void BusyMessage();
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.HoursOfOperation;
+using Switchboard.Resources.Queue;
 
-    [Action(Order = 2)]
-    [GetCustomerInput]
-    [Text("Press 1 for a callback, or press 2 to continue waiting")]
-    [MaxDigits(1)]
-    public partial Task<string> GetChoice();
+var app = new SwitchboardApp();
+var stack = app.CreateCallCenter("FluentExample", "fluent-example");
 
-    [Action(Order = 3)]
-    [Branch(nameof(GetChoice))]
-    public partial void HandleChoice()
-    {
-        OnDigit("1", () => SetupCallback());
-        OnDigit("2", () => TransferToQueue("Support"));
-    }
+// Add hours of operation
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
 
-    [Action(Order = 4)]
-    [Sequence]
-    public partial void SetupCallback()
-    {
-        InvokeLambda("CreateCallback", input: new
-        {
-            phoneNumber = SystemAttribute("CustomerEndpoint.Address"),
-            queueName = "Support"
-        });
+// Add queues using factory methods
+var salesQueue = Queue.Create("Sales")
+    .SetDescription("Sales inquiries")
+    .SetMaxContacts(50)
+    .Build();
+stack.AddQueue(salesQueue, "BusinessHours");
 
-        PlayMessage("Your callback has been scheduled. Thank you!");
-        Disconnect();
-    }
-}
+var supportQueue = Queue.Create("Support")
+    .SetDescription("Customer support")
+    .SetMaxContacts(100)
+    .Build();
+stack.AddQueue(supportQueue, "BusinessHours");
+
+// Add flow with menu
+var flow = Flow.Create("MainMenu")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome!")
+    .GetCustomerInput("Press 1 for sales, 2 for support.")
+    .OnDigit("1", sales => sales.TransferToQueue("Sales"))
+    .OnDigit("2", support => support.TransferToQueue("Support"))
+    .OnTimeout(t => t.Disconnect())
+    .OnError(e => e.Disconnect())
+    .OnDefault(d => d.Disconnect())
+    .Build();
+stack.AddFlow(flow);
+
+app.Synth();
 ```
 
-**Result**: Better customer experience with callbacks.
+**Result**: Clean, readable configuration using the fluent API.
 
 ---
 
 ## Example 6: Multi-Language Support
 
-**What it does**: Let customers choose their language.
+**What it does**: Let customers choose their language and route accordingly.
 
 ```csharp
-[ContactFlow("LanguageSelection")]
-public partial class LanguageSelectionFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [GetCustomerInput]
-    [Text("For English, press 1. Para español, oprima 2.")]
-    [MaxDigits(1)]
-    public partial Task<string> GetLanguage();
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.HoursOfOperation;
+using Switchboard.Resources.Queue;
 
-    [Action(Order = 2)]
-    [Branch(nameof(GetLanguage))]
-    public partial void RouteByLanguage()
-    {
-        OnDigit("1", () => SetEnglish());
-        OnDigit("2", () => SetSpanish());
-    }
+var app = new SwitchboardApp();
+var stack = app.CreateCallCenter("MultiLangExample", "multilang-example");
 
-    [Action(Order = 3)]
-    [Sequence]
-    public partial void SetEnglish()
-    {
-        SetContactAttribute("Language", "English");
-        TransferToQueue("EnglishSupport");
-    }
+// Create hours
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
 
-    [Action(Order = 4)]
-    [Sequence]
-    public partial void SetSpanish()
-    {
-        SetContactAttribute("Language", "Spanish");
-        TransferToQueue("SpanishSupport");
-    }
-}
+// Create language-specific queues
+var englishQueue = Queue.Create("EnglishSupport").Build();
+stack.AddQueue(englishQueue, "BusinessHours");
+
+var spanishQueue = Queue.Create("SpanishSupport").Build();
+stack.AddQueue(spanishQueue, "BusinessHours");
+
+// Create language selection flow
+var flow = Flow.Create("LanguageSelection")
+    .SetType(FlowType.ContactFlow)
+    .GetCustomerInput("For English, press 1. Para espanol, oprima 2.")
+    .OnDigit("1", english => english
+        .SetContactAttributes(attrs => attrs["Language"] = "English")
+        .PlayPrompt("Connecting you to an English-speaking agent.")
+        .TransferToQueue("EnglishSupport"))
+    .OnDigit("2", spanish => spanish
+        .SetContactAttributes(attrs => attrs["Language"] = "Spanish")
+        .PlayPrompt("Conectandole con un agente que habla espanol.")
+        .TransferToQueue("SpanishSupport"))
+    .OnDefault(defaultPath => defaultPath
+        .PlayPrompt("Invalid selection. Connecting to English support.")
+        .TransferToQueue("EnglishSupport"))
+    .OnTimeout(t => t.TransferToQueue("EnglishSupport"))
+    .OnError(e => e.Disconnect())
+    .Build();
+stack.AddFlow(flow);
+
+app.Synth();
 ```
 
 **Result**: Multi-language call routing.
 
 ---
 
-## Example 7: Voicemail Flow
+## Example 7: CheckHoursOfOperation Example
 
-**What it does**: Record voicemail after hours.
+**What it does**: Routes calls differently based on business hours.
 
 ```csharp
-[ContactFlow("VoicemailFlow")]
-public partial class VoicemailFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message("Please leave a message after the tone")]
-    public partial void Instructions();
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.HoursOfOperation;
+using Switchboard.Resources.Queue;
 
-    [Action(Order = 2)]
-    [SetWorkingQueue("VoicemailQueue")]
-    public partial void SetQueue();
+var app = new SwitchboardApp();
+var stack = app.CreateCallCenter("HoursExample", "hours-example");
 
-    [Action(Order = 3)]
-    [StartMediaStreaming]  // Or appropriate voicemail action
-    public partial void RecordMessage();
+// Create hours and queues
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
 
-    [Action(Order = 4)]
-    [Message("Thank you. We will contact you soon. Goodbye.")]
-    public partial void ThankYou();
+var salesQueue = Queue.Create("Sales").Build();
+stack.AddQueue(salesQueue, "BusinessHours");
 
-    [Action(Order = 5)]
-    [Disconnect]
-    public partial void End();
-}
+// Create flow that checks business hours
+var flow = Flow.Create("HoursCheckFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Thank you for calling.")
+    .CheckHoursOfOperation("BusinessHours")
+        .OnInHours(inHours => inHours
+            .PlayPrompt("We are currently open.")
+            .TransferToQueue("Sales"))
+        .OnOutOfHours(outOfHours => outOfHours
+            .PlayPrompt("We are currently closed. Please call back during business hours.")
+            .Disconnect())
+        .OnError(error => error.Disconnect())
+    .Build();
+stack.AddFlow(flow);
+
+app.Synth();
 ```
 
-**Result**: Automated voicemail system.
+**Result**: Callers are routed based on business hours.
 
 ---
 
@@ -340,47 +413,55 @@ Here's the recommended file structure for a minimal project:
 ```
 MyCallCenter/
 ├── Program.cs                  # CDK entry point
-├── Flows/
-│   └── WelcomeFlow.cs         # Your contact flows
-├── Lambdas/                   # Optional Lambda functions
+├── cdk.json                    # CDK configuration
+├── Lambda/                     # Optional Lambda functions
 │   └── ValidateAccount/
 │       ├── Function.cs
 │       └── Function.csproj
-├── cdk.json                   # CDK configuration
-├── appsettings.json           # App configuration
 └── MyCallCenter.csproj
 ```
 
 **Program.cs**:
 
 ```csharp
-using Amazon.CDK;
-using Microsoft.Extensions.Hosting;
-using Switchboard;
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.HoursOfOperation;
+using Switchboard.Resources.Queue;
 
-var builder = Host.CreateApplicationBuilder(args);
+var app = new SwitchboardApp();
 
-builder.Services.AddSwitchboard(options =>
-{
-    options.InstanceName = builder.Configuration["Connect:InstanceName"];
-    options.Region = builder.Configuration["Connect:Region"];
-})
-.AddFlowDefinitions(typeof(Program).Assembly);
+var stack = app.CreateCallCenter("MyCallCenter", "my-call-center");
 
-var host = builder.Build();
-var app = host.Services.GetRequiredService<ISwitchboardApp>();
+// Add hours of operation
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
+
+// Add queues
+var salesQueue = Queue.Create("Sales").Build();
+stack.AddQueue(salesQueue, "BusinessHours");
+
+var supportQueue = Queue.Create("Support").Build();
+stack.AddQueue(supportQueue, "BusinessHours");
+
+// Add main flow
+var flow = Flow.Create("MainFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome to MyCallCenter!")
+    .GetCustomerInput("Press 1 for sales, 2 for support.")
+    .OnDigit("1", sales => sales.TransferToQueue("Sales"))
+    .OnDigit("2", support => support.TransferToQueue("Support"))
+    .OnTimeout(t => t.Disconnect())
+    .OnError(e => e.Disconnect())
+    .OnDefault(d => d.Disconnect())
+    .Build();
+stack.AddFlow(flow);
+
 app.Synth();
-```
-
-**appsettings.json**:
-
-```json
-{
-  "Connect": {
-    "InstanceName": "MyCallCenter",
-    "Region": "us-east-1"
-  }
-}
 ```
 
 **cdk.json**:
@@ -398,38 +479,34 @@ app.Synth();
 
 ## Comparison: Minimal vs Production
 
-| Feature             | Minimal Setup      | Production Setup                 |
-| ------------------- | ------------------ | -------------------------------- |
-| **Files**           | 3-5 files          | 20+ files                        |
-| **Configuration**   | Hardcoded          | appsettings.json + env vars      |
-| **Flows**           | 1-2 flows          | 10+ flows with modules           |
-| **Queues**          | 1-2 queues         | Multiple with routing profiles   |
-| **Lambda**          | Optional           | Multiple for business logic      |
-| **Monitoring**      | Default CloudWatch | Custom dashboards + alarms       |
-| **Security**        | Basic              | VPC, encryption, least privilege |
-| **CI/CD**           | Manual deployment  | GitHub Actions pipeline          |
-| **Deployment Time** | 5 minutes          | 1-2 hours setup                  |
+| Feature             | Minimal Setup | Production Setup               |
+| ------------------- | ------------- | ------------------------------ |
+| **Files**           | 2-3 files     | 10+ files                      |
+| **Configuration**   | Hardcoded     | Environment-based              |
+| **Flows**           | 1-2 flows     | Multiple flows                 |
+| **Queues**          | 1-2 queues    | Multiple with routing profiles |
+| **Lambda**          | Optional      | Multiple for business logic    |
+| **Deployment Time** | 5 minutes     | 30+ minutes setup              |
 
 ## When to Use Each
 
 ### Use Minimal Setup When:
 
-- ✅ Learning the framework
-- ✅ Prototyping
-- ✅ Simple use cases (1-2 queues)
-- ✅ Internal testing
-- ✅ Development environment
+- Learning the framework
+- Prototyping
+- Simple use cases (1-2 queues)
+- Internal testing
+- Development environment
 
 ### Use Production Setup When:
 
-- ✅ Customer-facing deployment
-- ✅ Multiple environments (dev/staging/prod)
-- ✅ Complex routing logic
-- ✅ Compliance requirements
-- ✅ High availability needed
+- Customer-facing deployment
+- Multiple environments (dev/staging/prod)
+- Complex routing logic
+- High availability needed
 
 ## Next Steps
 
-- **Going to Production?** → See [Enterprise (Attributes)](/examples/enterprise-attributes) or [Enterprise (Fluent)](/examples/enterprise-fluent)
-- **Need More Flows?** → Check [Single File Setup](/examples/single-file-setup) for more patterns
+- **Need More Patterns?** → Check [Flow Patterns](/guide/flows/basics)
 - **Advanced Features?** → Read [Framework Patterns](/guide/patterns)
+- **Full Example?** → See the [SimpleCallCenter](/examples/simple-call-center) project

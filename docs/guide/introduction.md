@@ -1,26 +1,21 @@
 # Introduction
 
-::: warning ALPHA RELEASE
-Switchboard is currently in **preview** (v0.1.0-preview.17). The API is not yet stable and may change between releases. We welcome feedback and contributions as we work toward a stable 1.0 release.
-:::
-
 Switchboard is a code-first, type-safe framework for building and managing Amazon Connect contact centers using AWS CDK and .NET 10.
 
 ## What is it?
 
-Instead of clicking through the AWS Console or writing YAML/JSON, you define your contact center infrastructure in **C# code** using **attributes** and **fluent builders**. The framework then:
+Instead of clicking through the AWS Console or writing YAML/JSON, you define your contact center infrastructure in **C# code** using a **fluent API**. The framework then:
 
-1. **Generates the implementation** using source generators
-2. **Validates at compile-time** using Roslyn analyzers
-3. **Deploys via CDK** to your AWS account
-4. **Enables runtime updates** through DynamoDB configuration
+1. **Provides type-safe builders** for all Connect resources
+2. **Deploys via CDK** to your AWS account
+3. **Manages existing instances** or creates new ones
 
 ## Core Philosophy
 
 ### Code-First, Not Console-First
 
 ```csharp
-// ❌ Traditional Approach: Click through console, export JSON
+// Traditional Approach: Click through console, export JSON
 {
   "Version": "2019-10-30",
   "StartAction": "abc-123",
@@ -35,31 +30,30 @@ Instead of clicking through the AWS Console or writing YAML/JSON, you define you
   ]
 }
 
-// ✅ This Framework: Write C# with attributes
-[ContactFlow("WelcomeFlow")]
-public partial class WelcomeFlow
-{
-    [Message("Welcome")]
-    public partial void Welcome();
+// This Framework: Write C# with a fluent API
+var flow = Flow.Create("WelcomeFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome")
+    .TransferToQueue("Sales")
+    .Disconnect()
+    .Build();
 
-    [TransferToQueue("Sales")]
-    public partial void Transfer();
-}
+stack.AddFlow(flow);
 ```
 
-### Type-Safe, Not Error-Prone
+### Fluent and Readable
 
-The framework uses C#'s type system to catch errors **before deployment**:
+The framework uses a fluent API that guides you through configuration:
 
 ```csharp
-// ✅ Compile-time error if queue doesn't exist
-flow.TransferTo<SalesQueue>();
+// IntelliSense shows available methods at each step
+var queue = Queue.Create("Sales")
+    .SetDescription("Sales inquiries")
+    .SetMaxContacts(50)
+    .AddTag("Department", "Sales")
+    .Build();
 
-// ✅ IntelliSense shows available methods
-flow.PlayPrompt(...)  // IDE autocomplete works
-
-// ✅ Roslyn analyzer catches issues
-[TransferToQueue("NonExistent")]  // Analyzer error: Queue not defined
+stack.AddQueue(queue, "BusinessHours");
 ```
 
 ### Declarative, Not Imperative
@@ -67,127 +61,166 @@ flow.PlayPrompt(...)  // IDE autocomplete works
 Tell the framework **what** you want, not **how** to build it:
 
 ```csharp
-[ContactFlow("CustomerService")]
-[Queue("Support", MaxContacts = 50)]
-[BusinessHours("9am-5pm", TimeZone = "America/New_York")]
-public partial class CustomerServiceFlow
-{
-    // Framework generates everything automatically
-}
+var stack = app.CreateCallCenter("MyCallCenter", "my-call-center");
+
+// Add hours of operation
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+
+stack.AddHoursOfOperation(hours);
+
+// Framework generates everything automatically
 ```
 
 ## Key Features
 
-### 🎯 Attribute-Based Configuration
+### Fluent API
 
-Define infrastructure using C# attributes:
-
-```csharp
-[Queue("VIPSupport")]
-[MaxContacts(25)]
-[ServiceLevel(Threshold = 20, Target = 0.95)]
-[RoutingStrategy(typeof(SkillBasedRouting))]
-public class VipQueue : QueueDefinitionBase { }
-```
-
-### 🏗️ Fluent Builders
-
-Programmatic alternative with full control:
+Define all resources with intuitive, chainable methods:
 
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("SalesFlow")
-    .PlayPrompt("Welcome to sales")
-    .GetCustomerInput(input => {
-        input.Text = "Press 1 for...";
-        input.OnDigit("1", "sales-queue");
-    })
+// Create a queue
+var salesQueue = Queue.Create("VIPSupport")
+    .SetDescription("VIP customer support")
+    .SetMaxContacts(25)
+    .AddTag("Priority", "High")
     .Build();
+
+var queueConstruct = stack.AddQueue(salesQueue, "BusinessHours");
+
+// Create a routing profile (routing profiles are configured separately)
 ```
 
-### ⚡ Dynamic Configuration
+### Contact Flow Builder
 
-Update flow behavior at runtime without redeployment:
+Build IVR flows with branching, menus, and Lambda integration:
 
 ```csharp
-// Store in DynamoDB
-await configManager.UpdateFlowParameter(
-    flowId: "sales-inbound",
-    parameter: "maxQueueTime",
-    value: 300
+var flow = Flow.Create("SalesFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome to sales")
+    .GetCustomerInput("Press 1 for orders, 2 for support.", input =>
+    {
+        input.TimeoutSeconds = 5;
+    })
+    .OnPressed("1", orders => orders
+        .TransferToQueue("Orders"))
+    .OnPressed("2", support => support
+        .TransferToQueue("Support"))
+    .OnTimeout(timeout => timeout
+        .PlayPrompt("No input received.")
+        .Disconnect())
+    .OnError(error => error.Disconnect())
+    .OnDefault(def => def.Disconnect())
+    .Build();
+
+stack.AddFlow(flow);
+```
+
+### Lambda Integration
+
+First-class support for Lambda functions in your flows:
+
+```csharp
+// Create a Lambda function (using CDK constructs)
+// Note: Lambda creation is outside Switchboard scope - use AWS CDK directly
+// var validateLambda = new Function(stack, "ValidateAccount", ...);
+
+// Use Lambda in a flow
+var flow = Flow.Create("AuthFlow")
+    .InvokeLambda("arn:aws:lambda:us-east-1:123456789012:function:validate-account", "validate-account")
+    .OnSuccess(success => success.TransferToQueue("Support"))
+    .OnError(error => error.Disconnect())
+    .Build();
+
+stack.AddFlow(flow);
+```
+
+### Existing Instance Support
+
+Work with existing Amazon Connect instances without creating new ones:
+
+```csharp
+// Use an existing Connect instance by ARN
+var stack = app.UseExistingCallCenter(
+    "MyStack",
+    "arn:aws:connect:us-east-1:123456789012:instance/abc-123",
+    "my-existing-call-center"
 );
 
-// Next call automatically uses new value - no CDK deployment needed
+// Add new resources to your existing instance
+var queue = Queue.Create("NewQueue")
+    .Build();
+
+stack.AddQueue(queue, "BusinessHours");
 ```
 
-### 🔍 Compile-Time Validation
+### Fluent API
 
-Roslyn analyzers catch errors during development:
-
-```csharp
-[TransferToQueue("Sales")]  // ✅ OK - queue exists
-
-[TransferToQueue("Typo")]   // ❌ Analyzer error at compile-time
-                            //    "Queue 'Typo' is not defined"
-```
-
-### 📦 Source Generators
-
-Write minimal code, framework generates the rest:
+Add all resources using the fluent API:
 
 ```csharp
-// You write:
-[ContactFlow("Sales")]
-public partial class SalesFlow
-{
-    [Message("Welcome")]
-    public partial void Welcome();
-}
+var app = new SwitchboardApp();
+var stack = app.CreateCallCenter("MyStack", "my-call-center");
 
-// Generator creates:
-// - Full ContactFlow implementation
-// - CDK constructs
-// - Validation logic
-// - CloudFormation templates
-```
+// Add hours of operation
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
 
-### 🧩 Dependency Injection
+// Add queues
+var salesQueue = Queue.Create("Sales")
+    .SetDescription("Sales inquiries")
+    .Build();
+stack.AddQueue(salesQueue, "BusinessHours");
 
-ASP.NET Core-style DI for clean architecture:
+var supportQueue = Queue.Create("Support")
+    .SetDescription("Customer support")
+    .Build();
+stack.AddQueue(supportQueue, "BusinessHours");
 
-```csharp
-builder.Services.AddSwitchboard(options => { })
-    .AddFlowDefinitions(typeof(Program).Assembly)
-    .AddDynamicConfiguration(config => config.UseDynamoDB())
-    .UseMiddleware<LoggingMiddleware>();
+// Add flow
+var flow = Flow.Create("MainMenu")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome!")
+    .TransferToQueue("Sales")
+    .Disconnect()
+    .Build();
+stack.AddFlow(flow);
 ```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│   Your Code (Attributes + Minimal Logic)    │
-└─────────────────┬───────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────┐
-│   Framework (Source Generators + Builders)   │
-│   • Generates implementation                 │
-│   • Validates flows                          │
-│   • Creates CDK constructs                   │
-└─────────────────┬───────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────┐
-│   AWS CDK (Infrastructure as Code)           │
-│   • Synthesizes CloudFormation               │
-│   • Deploys to AWS                           │
-└─────────────────┬───────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────┐
-│   AWS (Amazon Connect + Supporting Services) │
-│   • Connect instance                         │
-│   • Queues, flows, routing                   │
-│   • Lambda, DynamoDB, S3                     │
-└──────────────────────────────────────────────┘
++---------------------------------------------+
+|   Your Code (Fluent API)                    |
++---------------------+-----------------------+
+                      |
++---------------------v-----------------------+
+|   Framework (Builders + CDK Constructs)     |
+|   - Type-safe configuration                 |
+|   - Flow JSON generation                    |
+|   - CDK construct wrappers                  |
++---------------------+-----------------------+
+                      |
++---------------------v-----------------------+
+|   AWS CDK (Infrastructure as Code)          |
+|   - Synthesizes CloudFormation              |
+|   - Deploys to AWS                          |
++---------------------+-----------------------+
+                      |
++---------------------v-----------------------+
+|   AWS (Amazon Connect + Supporting Services)|
+|   - Connect instance                        |
+|   - Queues, flows, routing                  |
+|   - Lambda, DynamoDB, S3                    |
++---------------------------------------------+
 ```
 
 ## Why C# for This Framework?
@@ -207,22 +240,20 @@ You can read this:
 
 ```csharp
 // C# - nearly identical!
-var flow = builder
-  .SetName("MyFlow")
-  .PlayPrompt("Hello")
-  .Build();
+var flow = Flow.Create("MyFlow")
+    .PlayPrompt("Hello")
+    .Disconnect()
+    .Build();
 ```
 
 ### Why C# Was Chosen
 
-Switchboard uses C# because of unique technical capabilities that other languages don't offer:
+Switchboard uses C# because of unique technical capabilities:
 
-**Advanced Language Features:**
+**Language Features:**
 
-- **Source Generators** - Generate code at compile-time from attributes (unique to C#/Roslyn compiler)
-- **Roslyn Analyzers** - Custom compiler extensions catch errors during development, not deployment
-- **Attributes** - Declarative metadata for clean, expressive configuration
 - **Strong Typing** - Catch errors before deployment with compile-time type checking
+- **Fluent API** - IntelliSense guides you through configuration options
 - **Pattern Matching** - Clean, expressive conditional logic
 - **LINQ** - Query and transform data elegantly
 - **Async/Await** - First-class asynchronous support for all AWS SDK calls
@@ -231,7 +262,6 @@ Switchboard uses C# because of unique technical capabilities that other language
 
 - **Type-Safe CloudFormation** - Generate CloudFormation from strongly-typed C# code
 - **Refactoring Support** - Rename variables/methods across your entire project with IDE support
-- **Compile-Time Validation** - Errors surface before `cdk deploy`, not after
 - **Testable Infrastructure** - Unit test your infrastructure code like application code
 
 **Ecosystem Advantages:**
@@ -239,7 +269,6 @@ Switchboard uses C# because of unique technical capabilities that other language
 - **AWS CDK Official Support** - First-class AWS CDK library maintained by AWS
 - **Cross-Platform** - Runs on Windows, macOS, Linux via .NET
 - **Modern Tooling** - Visual Studio, VS Code, Rider provide excellent IDE experiences
-- **Built-In Testing** - xUnit, NUnit, MSTest included - no external dependencies needed
 
 **BUT: Your Lambda Functions Can Use Any Runtime**
 
@@ -247,48 +276,37 @@ The framework provisions infrastructure using C#, but your Lambda functions can 
 
 ```csharp
 // Framework code (C#)
-[ContactFlow("Support")]
-public partial class SupportFlow
-{
+var flow = Flow.Create("Support")
+    .SetType(FlowType.ContactFlow)
     // Invoke a Python Lambda for ML inference
-    [InvokeLambda("arn:aws:lambda:...:sentiment-analysis-python")]
-    public partial void AnalyzeSentiment();
+    .InvokeLambda("arn:aws:lambda:...:sentiment-analysis-python", "sentiment-analysis")
+    .OnSuccess(success => success
+        // Invoke a Node.js Lambda for API calls
+        .InvokeLambda("arn:aws:lambda:...:crm-lookup-nodejs", "crm-lookup")
+        .OnSuccess(s => s.TransferToQueue("Support"))
+        .OnError(e => e.Disconnect()))
+    .OnError(error => error.Disconnect())
+    .Build();
 
-    // Invoke a Node.js Lambda for API calls
-    [InvokeLambda("arn:aws:lambda:...:crm-lookup-nodejs")]
-    public partial void LookupCustomer();
-
-    // Invoke a Go Lambda for high-performance processing
-    [InvokeLambda("arn:aws:lambda:...:data-processor-go")]
-    public partial void ProcessData();
-}
+stack.AddFlow(flow);
 ```
 
-✅ JavaScript/TypeScript Lambdas
-✅ Python Lambdas
-✅ Go Lambdas
-✅ Java Lambdas
-✅ Rust Lambdas
-
-The framework just invokes Lambda ARNs - runtime doesn't matter. Use the best language for each Lambda's specific task.
+The framework just invokes Lambda ARNs - runtime doesn't matter.
 
 ## Who Is This For?
 
 ### Perfect For:
 
-- **DevOps Engineers** managing Contact Center infrastructure as code (regardless of primary language)
+- **DevOps Engineers** managing Contact Center infrastructure as code
 - **JavaScript/TypeScript Developers** - C# syntax is nearly identical to TypeScript
 - **Python Developers** - If you know Python, C# basics take a day to learn
 - **Java Developers** - C# is similar to modern Java with less boilerplate
-- **Go Developers** - C# offers similar performance with more features
 - **.NET Developers** - Obviously a great fit
 - **Contact Center Teams** wanting version control and CI/CD
-- **System Architects** designing scalable contact center solutions
 - **Teams migrating** from manual console configuration to IaC
 
 ### Not Ideal For:
 
-- Teams requiring **pure** Python/TypeScript for everything (though Lambdas can be any language)
 - One-time setups that won't change (console might be faster)
 - Teams unwilling to learn any new syntax (even if minimal)
 
@@ -297,100 +315,79 @@ The framework just invokes Lambda ARNs - runtime doesn't matter. Use the best la
 ### 1. Define Your Infrastructure
 
 ```csharp
-[ContactFlow("CustomerSupport")]
-public partial class SupportFlow : FlowDefinitionBase
-{
-    [Message("Welcome to support")]
-    public partial void Welcome();
+var app = new SwitchboardApp();
+var stack = app.CreateCallCenter("MyCallCenter", "my-call-center");
 
-    [TransferToQueue("Support")]
-    public partial void Transfer();
-}
+// Add hours of operation
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
+
+// Add a queue
+var queue = Queue.Create("Support")
+    .SetDescription("Customer support")
+    .Build();
+stack.AddQueue(queue, "BusinessHours");
+
+// Add a flow
+var flow = Flow.Create("WelcomeFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome to support")
+    .TransferToQueue("Support")
+    .Disconnect()
+    .Build();
+stack.AddFlow(flow);
+
+app.Synth();
 ```
 
-### 2. Framework Generates Code
-
-Source generators create the full implementation at compile-time:
-
-- Flow JSON structure
-- CDK constructs
-- Validation logic
-- Type-safe builders
-
-### 3. Deploy with CDK
+### 2. Deploy with CDK
 
 ```bash
 cdk synth  # Generate CloudFormation
 cdk deploy # Deploy to AWS
 ```
 
-### 4. Manage at Runtime
+### 3. Resources Created
 
-Update configuration in DynamoDB for zero-downtime changes:
+The framework automatically creates:
 
-```csharp
-// Update queue timeout
-await config.UpdateAsync("SupportFlow", new
-{
-    maxQueueTime = 600  // Changed from 300 to 600
-});
-// Next call uses new value automatically
-```
-
-## Comparison with Alternatives
-
-| Approach           | Version Control | Type Safety | Testing      | Runtime Updates      | Learning Curve |
-| ------------------ | --------------- | ----------- | ------------ | -------------------- | -------------- |
-| **AWS Console**    | ❌ Manual       | ❌ None     | ❌ Manual    | ❌ Requires redeploy | ⭐ Easy        |
-| **CloudFormation** | ✅ Git          | ⚠️ Limited  | ⚠️ Difficult | ❌ Requires redeploy | ⭐⭐ Medium    |
-| **Terraform**      | ✅ Git          | ⚠️ Limited  | ⚠️ Difficult | ❌ Requires redeploy | ⭐⭐⭐ Hard    |
-| **Switchboard**    | ✅ Git          | ✅ Full     | ✅ Easy      | ✅ DynamoDB          | ⭐⭐ Medium    |
+- Amazon Connect instance (or uses existing)
+- Queues with hours of operation
+- Contact flows with proper action structure
+- IAM roles and permissions
+- CloudWatch logs
 
 ## What You Can Build
 
-- ✅ **IVR Systems** - Multi-level menus with intelligent routing
-- ✅ **Customer Authentication** - Secure flows with Lambda integration
-- ✅ **Multi-Language Support** - Route based on language selection
-- ✅ **Business Hours Routing** - Different flows for hours/after-hours
-- ✅ **Callback Flows** - Queue callbacks, scheduled callbacks
-- ✅ **Voicemail Systems** - Record and route messages
-- ✅ **Agent Assist** - Screen pops, whisper coaching
-- ✅ **Complex Routing** - Skills-based, VIP, geographic routing
-
-## Example: Before and After
-
-### Before (Console/CloudFormation)
-
-1. ✏️ Design flow in Connect Console
-2. 💾 Export flow as JSON
-3. 📋 Copy JSON to CloudFormation
-4. 🔧 Manually wire up queues, ARNs
-5. ✅ Deploy via CloudFormation
-6. 🐛 Debug JSON syntax errors
-7. 🔁 Repeat for each change
-
-**Result**: Time-consuming, error-prone, hard to test
-
-### After (This Framework)
-
-1. 💻 Write C# with attributes
-2. ✅ Compile (catches errors immediately)
-3. 🚀 `cdk deploy`
-
-**Result**: Fast, type-safe, testable
+- **IVR Systems** - Multi-level menus with intelligent routing
+- **Customer Authentication** - Secure flows with Lambda integration
+- **Multi-Language Support** - Route based on language selection
+- **Business Hours Routing** - Different flows for hours/after-hours
+- **Complex Routing** - Skills-based, VIP, geographic routing
 
 ## Next Steps
 
 Ready to get started?
 
 1. **[Quick Start](/guide/quick-start)** - Build your first flow in 5 minutes
-2. **[Minimal Examples](/examples/minimal-setup)** - Simple, focused examples
+2. **[Minimal Examples](https://nicksoftware.github.io/switchboard-docs/examples/minimal-setup.html)** - Simple, focused examples
 3. **[Framework Patterns](/guide/patterns)** - Understand the framework patterns
-4. **[Enterprise Examples](/examples/enterprise-attributes)** - Production-ready setups
+
+## Future Features
+
+The following features are planned for future releases:
+
+- **Attribute-Based Configuration** - Define flows using C# attributes
+- **Source Generators** - Generate implementation code at compile-time
+- **Roslyn Analyzers** - Compile-time validation of flows and queue references
+- **Dynamic Configuration** - Update flow behavior at runtime via DynamoDB
 
 ## Get Help
 
-- 📖 **Documentation**: You're reading it!
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/nicksoftware/AmazonConnectBuilderFramework/discussions)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/nicksoftware/AmazonConnectBuilderFramework/issues)
-- 📧 **Email**: nicolusmaluleke@gmail.com
+- **Documentation**: You're reading it!
+- **Discussions**: [GitHub Discussions](https://github.com/nicksoftware/switchboard-docs/discussions)
+- **Issues**: [GitHub Issues](https://github.com/nicksoftware/switchboard-docs/issues)

@@ -1,9 +1,5 @@
 # Quick Start
 
-::: warning PREVIEW RELEASE
-Switchboard is currently in **preview** (v0.1.0-preview.17). The API may change before the stable 1.0 release.
-:::
-
 Get up and running with Switchboard in 5 minutes.
 
 ## Prerequisites
@@ -26,70 +22,56 @@ dotnet new console -n MyConnectApp -f net10.0
 ### 2. Install the Framework
 
 ```bash
-# Install the framework package (preview version)
-dotnet add package NickSoftware.Switchboard --prerelease
+# Install the framework package
+dotnet add package NickSoftware.Switchboard
 
 # Install AWS CDK CLI globally
 npm install -g aws-cdk
 ```
 
-### 3. Create Your First Flow
+### 3. Create Your First Contact Center
 
-Create `SalesFlow.cs`:
-
-```csharp
-using Switchboard;
-using Switchboard.Attributes;
-
-namespace MyConnectApp;
-
-[ContactFlow("SalesInbound")]
-public partial class SalesFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message("Welcome to our sales team")]
-    public partial void Welcome();
-
-    [Action(Order = 2)]
-    [GetCustomerInput]
-    [Text("For new customers, press 1. For existing, press 2.")]
-    [MaxDigits(1)]
-    public partial Task<string> GetCustomerType();
-
-    [Action(Order = 3)]
-    [TransferToQueue("Sales")]
-    public partial void TransferToSales();
-}
-```
-
-### 4. Configure Your CDK App
-
-Update `Program.cs`:
+Replace `Program.cs` with:
 
 ```csharp
-using Amazon.CDK;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Switchboard;
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.HoursOfOperation;
+using Switchboard.Resources.Queue;
 
-var builder = Host.CreateApplicationBuilder(args);
+var app = new SwitchboardApp();
 
-// Configure Switchboard
-builder.Services.AddSwitchboard(options =>
-{
-    options.InstanceName = "MyCallCenter";
-    options.Region = "us-east-1";
-})
-.AddFlowDefinitions(typeof(Program).Assembly);
+// Create a new Connect instance
+var stack = app.CreateCallCenter("MyCallCenter", "my-call-center");
 
-var host = builder.Build();
+// Add business hours
+var businessHours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(businessHours);
 
-// Create CDK app from DI container
-var app = host.Services.GetRequiredService<ISwitchboardApp>();
+// Add a queue
+var supportQueue = Queue.Create("Support")
+    .SetDescription("Customer support queue")
+    .SetMaxContacts(100)
+    .Build();
+stack.AddQueue(supportQueue, "BusinessHours");
+
+// Add a simple contact flow
+var flow = Flow.Create("WelcomeFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome to our call center!")
+    .TransferToQueue("Support")
+    .Disconnect()
+    .Build();
+stack.AddFlow(flow);
+
 app.Synth();
 ```
 
-### 5. Create cdk.json
+### 4. Create cdk.json
 
 ```json
 {
@@ -100,7 +82,7 @@ app.Synth();
 }
 ```
 
-### 6. Deploy
+### 5. Deploy
 
 ```bash
 # Bootstrap AWS account (first time only)
@@ -117,17 +99,89 @@ cdk deploy
 
 The framework automatically created:
 
-- ✅ Amazon Connect instance
-- ✅ Sales queue
-- ✅ Contact flow with welcome message and routing
-- ✅ IAM roles and permissions
-- ✅ CloudWatch logs
+- Amazon Connect instance
+- Support queue with business hours
+- Contact flow with welcome message and routing
+- IAM roles and permissions
+- CloudWatch logs
+
+## Using an Existing Connect Instance
+
+If you already have a Connect instance:
+
+```csharp
+using Switchboard.Core;
+using Switchboard.Flows;
+using Switchboard.Resources.Queue;
+
+var app = new SwitchboardApp();
+
+// Use existing Connect instance
+var stack = app.UseExistingCallCenter(
+    "MyStack",
+    "arn:aws:connect:us-east-1:123456789012:instance/abc-123",
+    "my-call-center"  // optional alias
+);
+
+// Add resources to existing instance
+var queue = Queue.Create("Sales")
+    .SetMaxContacts(50)
+    .Build();
+stack.AddQueue(queue, "BusinessHours");
+
+app.Synth();
+```
+
+## Fluent API
+
+You can also use the fluent API for all resources:
+
+```csharp
+var app = new SwitchboardApp();
+var stack = app.CreateCallCenter("MyStack", "my-call-center");
+
+// Add hours of operation
+var hours = HoursOfOperation
+    .Create("BusinessHours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build();
+stack.AddHoursOfOperation(hours);
+
+// Add queues
+var salesQueue = Queue.Create("Sales")
+    .SetDescription("Sales inquiries")
+    .SetMaxContacts(50)
+    .Build();
+stack.AddQueue(salesQueue, "BusinessHours");
+
+var supportQueue = Queue.Create("Support")
+    .SetDescription("Customer support")
+    .SetMaxContacts(100)
+    .Build();
+stack.AddQueue(supportQueue, "BusinessHours");
+
+// Add flow with GetCustomerInput
+var flow = Flow.Create("MainMenu")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome!")
+    .GetCustomerInput("Press 1 for sales, 2 for support")
+    .OnDigit("1", sales => sales.TransferToQueue("Sales"))
+    .OnDigit("2", support => support.TransferToQueue("Support"))
+    .OnTimeout(t => t.Disconnect())
+    .OnError(e => e.Disconnect())
+    .OnDefault(d => d.Disconnect())
+    .Build();
+stack.AddFlow(flow);
+
+app.Synth();
+```
 
 ## Next Steps
 
-- [Learn about patterns](/guide/patterns) - Understand declarative flow definition and usage patterns
-- [View more examples](/examples/minimal-setup) - Complete working examples
-- [Enterprise examples](/examples/enterprise-attributes) - Production-ready setups
+- [Building Queues](/building/queues) - Learn about queue configuration
+- [Building Flows](/building/flows) - Create IVR menus and routing
+- [View more examples](https://nicksoftware.github.io/switchboard-docs/examples/minimal-setup.html) - Complete working examples
 
 ## Troubleshooting
 
@@ -155,5 +209,5 @@ Check IAM permissions. Your user/role needs permissions for:
 - CloudFormation
 - Amazon Connect
 - IAM role creation
-- Lambda (if using dynamic config)
-- DynamoDB (if using dynamic config)
+- Lambda (if using Lambda functions)
+- DynamoDB (if using DynamoDB tables)

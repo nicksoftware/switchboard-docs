@@ -9,6 +9,7 @@ This reference documents the available flow actions you can use when building co
 ## Quick Reference
 
 For working examples, see:
+
 - **[Building Flows Guide](/building/flows.md)** - Tutorial with examples
 - **[Minimal Setup Examples](/examples/minimal-setup.md)** - 8 common patterns
 - **[Complete Example](/building/complete-example.md)** - Full contact center
@@ -26,14 +27,17 @@ Plays a text-to-speech message to the caller.
 ```
 
 **Parameters:**
+
 - `text` (string) - The message to speak
 - `identifier` (string, optional) - Custom action ID
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("Greeting")
+var flow = Flow.Create("Greeting")
+    .SetType(FlowType.ContactFlow)
     .PlayPrompt("Thank you for calling. Please wait while we connect you.")
+    .Disconnect()
     .Build();
 ```
 
@@ -48,24 +52,31 @@ Collects DTMF input from the customer.
 ```
 
 **Parameters:**
+
 - `promptText` (string) - The prompt to play
 - `configure` (Action, optional) - Configuration callback
 
 **Configuration Options:**
+
 - `MaxDigits` (int) - Maximum digits to collect (default: 1)
 - `TimeoutSeconds` (int) - Timeout in seconds (default: 5)
 - `EncryptInput` (bool) - Whether to encrypt input (default: false)
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("GetInput")
+var flow = Flow.Create("GetInput")
+    .SetType(FlowType.ContactFlow)
     .GetCustomerInput("Enter your account number", input =>
     {
         input.MaxDigits = 10;
         input.TimeoutSeconds = 10;
         input.EncryptInput = true;
     })
+    .OnDigit("1", d => d.TransferToQueue("Support"))
+    .OnTimeout(t => t.Disconnect())
+    .OnError(e => e.Disconnect())
+    .OnDefault(d => d.Disconnect())
     .Build();
 ```
 
@@ -80,13 +91,15 @@ Transfers the contact to a queue.
 ```
 
 **Parameters:**
+
 - `queueName` (string) - Name of the queue
 - `identifier` (string, optional) - Custom action ID
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("TransferFlow")
+var flow = Flow.Create("TransferFlow")
+    .SetType(FlowType.ContactFlow)
     .PlayPrompt("Transferring you now")
     .TransferToQueue("Sales")
     .Build();
@@ -105,12 +118,14 @@ Ends the contact (hangs up).
 ```
 
 **Parameters:**
+
 - `identifier` (string, optional) - Custom action ID
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("Goodbye")
+var flow = Flow.Create("Goodbye")
+    .SetType(FlowType.ContactFlow)
     .PlayPrompt("Thank you for calling. Goodbye.")
     .Disconnect()
     .Build();
@@ -118,79 +133,79 @@ var flow = new FlowBuilder()
 
 ---
 
-### Branch()
+### CheckContactAttribute()
 
-Adds conditional branching logic. Branches route to **action identifiers**, not nested flows.
+Conditionally routes based on contact attribute values.
 
 ```csharp
-.Branch(branch =>
+.CheckContactAttribute(check =>
 {
-    branch.Case("1", "sales-action");
-    branch.Case("2", "support-action");
-    branch.Otherwise("default-action");
+    check.Attribute(Attributes.External("StatusCode"))
+        .Equals("200", success => success.TransferToQueue("Support"))
+        .Otherwise(failure => failure.Disconnect());
 })
 ```
 
 **Parameters:**
-- `configure` (`Action<BranchBuilder>`) - Branch configuration callback
-- `identifier` (string, optional) - Custom action ID
 
-**BranchBuilder Methods:**
-- `Case(value, targetActionId, operator)` - Compare input against a value
-- `When(expression, targetActionId, operator)` - Evaluate complex expression
-- `Otherwise(defaultActionId)` - Set fallback action ID
+- `configure` (`Action<CheckContactAttributeBuilder>`) - Configuration callback
+
+**CheckContactAttributeBuilder Methods:**
+
+- `Attribute(attributeRef)` - Specify which attribute to check
+- `Equals(value, handler)` - Branch when attribute equals value
+- `Otherwise(handler)` - Default branch when no conditions match
 
 **Example: Simple Menu Routing**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("Menu")
+var flow = Flow
+    .Create("Menu")
+    .SetType(FlowType.ContactFlow)
     .GetCustomerInput("Press 1 for sales, 2 for support", input => {
         input.MaxDigits = 1;
         input.TimeoutSeconds = 10;
     })
-    .Branch(branch =>
-    {
-        branch.Case("1", "sales-transfer");
-        branch.Case("2", "support-transfer");
-        branch.Otherwise("invalid-input");
-    })
-    // Define sales path
-    .PlayPrompt("Transferring to sales", "sales-transfer")
-    .TransferToQueue("Sales")
-    // Define support path
-    .PlayPrompt("Transferring to support", "support-transfer")
-    .TransferToQueue("Support")
-    // Define invalid path
-    .PlayPrompt("Invalid selection", "invalid-input")
-    .Disconnect()
+    .OnDigit("1", sales => sales
+        .PlayPrompt("Transferring to sales")
+        .TransferToQueue("Sales"))
+    .OnDigit("2", support => support
+        .PlayPrompt("Transferring to support")
+        .TransferToQueue("Support"))
+    .OnTimeout(t => t
+        .PlayPrompt("No input received")
+        .Disconnect())
+    .OnError(e => e.Disconnect())
+    .OnDefault(d => d
+        .PlayPrompt("Invalid selection")
+        .Disconnect())
     .Build();
 ```
 
-**Example: Complex Condition**
+**Example: Attribute-Based Routing**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("VIPRouting")
-    .InvokeLambda("GetCustomerTier")
-    .Branch(branch =>
-    {
-        branch.When("$.customer.tier == \"vip\"", "vip-path");
-        branch.When("$.customer.tier == \"premium\"", "premium-path");
-        branch.Otherwise("standard-path");
-    })
-    // VIP path
-    .SetContactAttributes(attrs => { attrs.Add("tier", "vip"); }, "vip-path")
-    .PlayPrompt("Welcome, VIP customer")
-    .TransferToQueue("VIPSupport")
-    // Premium path
-    .PlayPrompt("Welcome, premium customer", "premium-path")
-    .TransferToQueue("PremiumSupport")
-    // Standard path
-    .PlayPrompt("Welcome", "standard-path")
-    .TransferToQueue("StandardSupport")
+var flow = Flow.Create("CustomerRouting")
+    .InvokeLambda(lambdaArn, "GetCustomerTier")
+    .OnSuccess(success => success
+        .CheckContactAttribute(check =>
+        {
+            check.Attribute(Attributes.External("CustomerTier"))
+                .Equals("VIP", vip => vip
+                    .PlayPrompt("Welcome, VIP customer")
+                    .TransferToQueue("VIPSupport"))
+                .Equals("Premium", premium => premium
+                    .PlayPrompt("Welcome, premium customer")
+                    .TransferToQueue("PremiumSupport"))
+                .Otherwise(standard => standard
+                    .PlayPrompt("Welcome")
+                    .TransferToQueue("StandardSupport"));
+        }))
+    .OnError(error => error.Disconnect())
     .Build();
 ```
 
-**Note**: Branches point to action identifiers using the `identifier` parameter. Actions are defined linearly in the flow, and branches create routing logic between them.
+**Note**: Use `Attributes.External()` for Lambda response values, `Attributes.Contact()` for contact attributes, and `Attributes.System()` for system values.
 
 ---
 
@@ -203,16 +218,25 @@ Checks if current time falls within business hours.
 ```
 
 **Parameters:**
+
 - `hoursOfOperationName` (string) - Name of hours schedule
 - `identifier` (string, optional) - Custom action ID
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("HoursCheck")
+var flow = Flow
+    .Create("HoursCheck")
+    .SetType(FlowType.ContactFlow)
     .PlayPrompt("Thank you for calling")
     .CheckHoursOfOperation("BusinessHours")
-    // Future: .OnOpen() and .OnClosed() methods
+        .OnInHours(inHours => inHours
+            .PlayPrompt("We are open!")
+            .TransferToQueue("Support"))
+        .OnOutOfHours(outOfHours => outOfHours
+            .PlayPrompt("We are closed. Please call back during business hours.")
+            .Disconnect())
+        .OnError(error => error.Disconnect())
     .Build();
 ```
 
@@ -229,20 +253,27 @@ Invokes an AWS Lambda function.
 ```
 
 **Parameters:**
+
 - `functionName` (string) - Lambda function name
 - `configure` (Action, optional) - Configuration callback
 
 **Configuration Options:**
+
 - `TimeoutSeconds` (int) - Lambda timeout (default: 3)
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("LookupFlow")
-    .InvokeLambda("CustomerLookup", lambda =>
-    {
-        lambda.TimeoutSeconds = 8;
-    })
+var flow = Flow
+    .Create("LookupFlow")
+    .SetType(FlowType.ContactFlow)
+    .InvokeLambda("arn:aws:lambda:us-east-1:123456789012:function:CustomerLookup", "CustomerLookup")
+    .OnSuccess(success => success
+        .PlayPrompt("Customer found!")
+        .TransferToQueue("VIPSupport"))
+    .OnError(error => error
+        .PlayPrompt("Could not retrieve customer data.")
+        .Disconnect())
     .Build();
 ```
 
@@ -261,21 +292,169 @@ Sets custom contact attributes.
 ```
 
 **Parameters:**
+
 - `configure` (Action) - Attributes configuration callback
 - `identifier` (string, optional) - Custom action ID
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("SetAttributes")
+var flow =  Flow
+    .Create("SetAttributes")
+    .SetType(FlowType.ContactFlow)
     .SetContactAttributes(attrs =>
     {
         attrs["Source"] = "WebChat";
         attrs["Campaign"] = "Summer2024";
         attrs["Region"] = "US-East";
     })
+    .TransferToQueue("Support")
     .Build();
 ```
+
+---
+
+### StoreCustomerInput()
+
+Securely collects customer input (like account numbers or PINs) and stores it in system attributes.
+
+```csharp
+.StoreCustomerInput("Please enter your account number")
+```
+
+**Parameters:**
+
+- `promptText` (string) - The prompt to play
+- `configure` (Action, optional) - Configuration callback
+
+**Configuration Options:**
+
+- `MaxDigits` (int) - Maximum digits to collect
+- `InitialTimeoutSeconds` (int) - Time to wait for first digit
+- `BetweenEntryTimeoutSeconds` (int) - Time between digits
+- `CustomTerminatingKeypress` (string) - Key to terminate input (e.g., "#")
+
+**Example:**
+
+```csharp
+var flow = Flow.Create("AccountEntry")
+    .StoreCustomerInput("Please enter your account number followed by the hash key.", input =>
+    {
+        input.MaxDigits = 10;
+        input.InitialTimeoutSeconds = 10;
+        input.BetweenEntryTimeoutSeconds = 3;
+        input.CustomTerminatingKeypress = "#";
+    })
+    .OnSuccess(success => success
+        .SetContactAttributes(attrs =>
+        {
+            attrs["EnteredAccountNumber"] = Attributes.System(SystemAttributes.StoredCustomerInput);
+        })
+        .InvokeLambda(lambdaArn, "ValidateAccount"))
+    .OnError(error => error
+        .PlayPrompt("Invalid entry. Please try again."))
+    .ThenContinue()
+    .Build();
+```
+
+---
+
+### CheckStaffingForQueue()
+
+Checks agent availability for a specific queue.
+
+```csharp
+.CheckStaffingForQueue(queueArn, StaffingMetricType.Available)
+```
+
+**Parameters:**
+
+- `queueArn` (string) - ARN of the queue to check
+- `metricType` (StaffingMetricType) - Type of staffing check
+
+**StaffingMetricType Options:**
+
+- `Available` - Agents available to take calls
+- `Staffed` - Agents logged in (may be busy)
+
+**Example:**
+
+```csharp
+var flow = Flow.Create("StaffingCheck")
+    .PlayPrompt("Let me check agent availability.")
+    .CheckStaffingForQueue(supportQueueArn, StaffingMetricType.Available)
+    .OnTrue(agentsAvailable => agentsAvailable
+        .PlayPrompt("An agent is available!")
+        .TransferToQueue("Support")
+        .Disconnect())
+    .OnFalse(noAgents => noAgents
+        .PlayPrompt("All agents are currently busy.")
+        .GetCustomerInput("Press 1 to wait, or 2 for a callback.")
+        .OnDigit("1", wait => wait
+            .TransferToQueue("Support")
+            .Disconnect())
+        .OnDigit("2", callback => callback
+            .PlayPrompt("We will call you back.")
+            .Disconnect())
+        .OnDefault(d => d.Disconnect())
+        .OnTimeout(t => t.Disconnect())
+        .OnError(e => e.Disconnect()))
+    .OnError(error => error
+        .PlayPrompt("Technical difficulties.")
+        .Disconnect())
+    .Build();
+```
+
+---
+
+### Loop()
+
+Creates a retry loop with a maximum number of attempts.
+
+```csharp
+.Loop(3, loop => loop
+    .WhileLooping(attempt => /* actions for each attempt */)
+    .WhenDone(maxAttempts => /* actions when max reached */))
+```
+
+**Parameters:**
+
+- `maxAttempts` (int) - Maximum number of loop iterations
+- `configure` (Action) - Loop configuration callback
+
+**Loop Methods:**
+
+- `WhileLooping(handler)` - Actions to execute each iteration
+- `WhenDone(handler)` - Actions when max attempts reached
+
+**Example:**
+
+```csharp
+var flow = Flow.Create("RetryFlow")
+    .PlayPrompt("Welcome")
+    .Loop(3, mainLoop => mainLoop
+        .WhileLooping(attempt => attempt
+            .GetCustomerInput("Enter your PIN", input =>
+            {
+                input.MaxDigits = 4;
+                input.TimeoutSeconds = 10;
+            })
+            .OnDigit("1234", correct => correct
+                .PlayPrompt("PIN accepted!")
+                .TransferToQueue("Support")
+                .Disconnect())
+            .OnTimeout(t => t.PlayPrompt("No input received."))
+            .OnError(e => e.PlayPrompt("An error occurred."))
+            .OnDefault(d => d.PlayPrompt("Incorrect PIN."))
+            .ThenContinue())
+        .WhenDone(maxAttempts => maxAttempts
+            .PlayPrompt("Maximum attempts reached. Goodbye.")
+            .Disconnect()))
+    .Disconnect()
+    .Build();
+```
+
+**Note:** Use `.ThenContinue()` at the end of each loop iteration to continue to the next attempt.
 
 ---
 
@@ -290,10 +469,13 @@ Sets the flow name (required).
 ```
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("CustomerSupportFlow")
+var flow = Flow
+    .Create("CustomerSupportFlow")
+    .SetType(FlowType.ContactFlow)
     .PlayPrompt("Welcome")
+    .Disconnect()
     .Build();
 ```
 
@@ -308,11 +490,14 @@ Sets the flow description (optional).
 ```
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("MainFlow")
+var flow = Flow
+    .Create("MainFlow")
     .SetDescription("Primary IVR menu for all incoming calls")
+    .SetType(FlowType.ContactFlow)
     .PlayPrompt("Welcome")
+    .Disconnect()
     .Build();
 ```
 
@@ -327,6 +512,7 @@ Sets the flow type.
 ```
 
 **Available Types:**
+
 - `ContactFlow` - Standard contact flow (default)
 - `CustomerQueueFlow` - Plays while in queue
 - `CustomerHoldFlow` - Plays while on hold
@@ -338,12 +524,12 @@ Sets the flow type.
 - `QueueTransferFlow` - Queue transfer flow
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("HoldMusic")
+var flow = Flow.Create("HoldMusic")
     .SetType(FlowType.CustomerHoldFlow)
     .PlayPrompt("Please continue to hold")
-    .Build();
+    .Build(); // Hold flows don't require Disconnect
 ```
 
 ---
@@ -357,9 +543,10 @@ Adds a tag to the flow resource.
 ```
 
 **Example:**
+
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("SalesFlow")
+var flow = Flow
+    .Create("SalesFlow")
     .AddTag("Department", "Sales")
     .AddTag("Environment", "Production")
     .AddTag("CostCenter", "CC-1234")
@@ -374,8 +561,8 @@ var flow = new FlowBuilder()
 ### Pattern: Simple Greeting and Transfer
 
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("SimpleTransfer")
+var flow = Flow
+    .Create("SimpleTransfer")
     .PlayPrompt("Thank you for calling. Transferring you now.")
     .TransferToQueue("CustomerService")
     .Build();
@@ -384,8 +571,8 @@ var flow = new FlowBuilder()
 ### Pattern: IVR Menu
 
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("IVRMenu")
+var flow = Flow
+    .Create("IVRMenu")
     .PlayPrompt("Welcome to Acme Corp")
     .GetCustomerInput("Press 1 for sales, 2 for support, 3 for billing")
     .Branch(branch =>
@@ -401,75 +588,66 @@ var flow = new FlowBuilder()
 ### Pattern: Business Hours Check
 
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("HoursAwareFlow")
+var flow = Flow.Create("HoursAwareFlow")
     .PlayPrompt("Thank you for calling")
-    .CheckHoursOfOperation("BusinessHours")
-    // Future: Route based on open/closed status
+    .CheckHoursOfOperation(hoursOfOperationArn)
+    .OnInHours(inHours => inHours
+        .PlayPrompt("We are currently open")
+        .TransferToQueue("Support")
+        .Disconnect())
+    .OnOutOfHours(afterHours => afterHours
+        .PlayPrompt("We are currently closed. Please call back during business hours.")
+        .Disconnect())
+    .OnError(error => error.Disconnect())
     .Build();
 ```
 
 ### Pattern: Lambda Integration
 
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("CustomerLookup")
+var flow = Flow.Create("CustomerLookup")
     .PlayPrompt("Please wait while we retrieve your information")
-    .InvokeLambda("GetCustomerData", lambda =>
+    .InvokeLambda(lambdaArn, "GetCustomerData", lambda =>
     {
-        lambda.TimeoutSeconds = 5;
+        lambda.TimeoutSeconds = 8;
+        lambda.InputParameters["Action"] = "LOOKUP";
     })
-    .SetContactAttributes(attrs =>
-    {
-        attrs["CustomerFound"] = "true";
-    })
-    .TransferToQueue("VIPSupport")
+    .OnSuccess(success => success
+        .SetContactAttributes(attrs =>
+        {
+            attrs["CustomerName"] = Attributes.External("CustomerName");
+        })
+        .TransferToQueue("VIPSupport")
+        .Disconnect())
+    .OnError(error => error
+        .PlayPrompt("Unable to retrieve your information")
+        .Disconnect())
     .Build();
 ```
 
-### Pattern: Multi-Step Flow
+### Pattern: Multi-Step Flow with Loop
 
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("MultiStepFlow")
+var flow = Flow.Create("MultiStepFlow")
     .PlayPrompt("Welcome to our contact center")
-    .CheckHoursOfOperation("BusinessHours")
-    .GetCustomerInput("Press 1 to continue")
-    .InvokeLambda("ProcessInput")
-    .SetContactAttributes(attrs =>
-    {
-        attrs["ProcessedAt"] = DateTime.UtcNow.ToString();
-    })
-    .TransferToQueue("ProcessedQueue")
+    .Loop(3, mainLoop => mainLoop
+        .WhileLooping(attempt => attempt
+            .GetCustomerInput("Press 1 for sales, 2 for support")
+            .OnDigit("1", sales => sales
+                .TransferToQueue("Sales")
+                .Disconnect())
+            .OnDigit("2", support => support
+                .TransferToQueue("Support")
+                .Disconnect())
+            .OnTimeout(t => t.PlayPrompt("No input received"))
+            .OnError(e => e.PlayPrompt("An error occurred"))
+            .OnDefault(d => d.PlayPrompt("Invalid selection"))
+            .ThenContinue())
+        .WhenDone(maxAttempts => maxAttempts
+            .PlayPrompt("Maximum attempts reached. Goodbye.")
+            .Disconnect()))
+    .Disconnect()
     .Build();
-```
-
----
-
-## Comparison Operators
-
-Used with `Branch()` `When()` method for complex conditions:
-
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `Equals` | Equals (==) | Customer type equals "VIP" |
-| `NotEquals` | Not equals (!=) | Status not equals "Active" |
-| `GreaterThan` | Greater than (>) | Balance > 1000 |
-| `LessThan` | Less than (&lt;) | Age &lt; 21 |
-| `GreaterThanOrEqual` | Greater than or equal (>=) | Score >= 80 |
-| `LessThanOrEqual` | Less than or equal (&lt;=) | Wait time &lt;= 300 |
-| `Contains` | Contains substring | Email contains "@gmail.com" |
-| `StartsWith` | Starts with | Phone starts with "+1" |
-| `EndsWith` | Ends with | Username ends with ".admin" |
-
-**Example:**
-```csharp
-.Branch(branch =>
-{
-    branch.When("$.CustomerBalance", "high-value", ComparisonOperator.GreaterThan);
-    branch.When("$.Email", "gmail-user", ComparisonOperator.Contains);
-    branch.Otherwise("default");
-})
 ```
 
 ---
@@ -480,15 +658,13 @@ Used with `Branch()` `When()` method for complex conditions:
 
 ```csharp
 // Good - Fluent and readable
-var flow = new FlowBuilder()
-    .SetName("MyFlow")
+var flow = Flow.Create("MyFlow")
     .PlayPrompt("Welcome")
     .TransferToQueue("Support")
     .Build();
 
 // Avoid - Verbose
-var builder = new FlowBuilder();
-builder.SetName("MyFlow");
+var builder = Flow.Create("MyFlow");
 builder.PlayPrompt("Welcome");
 builder.TransferToQueue("Support");
 var flow = builder.Build();
@@ -497,8 +673,7 @@ var flow = builder.Build();
 ### 2. Validate Early
 
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("ValidatedFlow")
+var flow = Flow.Create("ValidatedFlow")
     .PlayPrompt("Welcome")
     .Build(); // Throws if invalid
 
@@ -524,7 +699,7 @@ var salesFlow = CreateSalesFlow();
 var supportFlow = CreateSupportFlow();
 
 // Avoid - One massive flow
-var hugeFlow = new FlowBuilder()
+var hugeFlow = Flow.Create("HugeFlow")
     // 100+ lines of actions...
     .Build();
 ```
@@ -548,4 +723,4 @@ Planned for upcoming releases:
 - [Building Flows Guide](/building/flows.md) - Complete tutorial
 - [Complete Example](/building/complete-example.md) - Full contact center
 - [SwitchboardStack Reference](/reference/stack.md) - Stack methods
-- [Minimal Examples](/examples/minimal-setup.md) - Quick patterns
+- [Minimal Examples](https://nicksoftware.github.io/switchboard-docs/examples/minimal-setup.html) - Quick patterns

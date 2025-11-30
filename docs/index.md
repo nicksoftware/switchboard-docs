@@ -11,162 +11,85 @@ hero:
       link: /guide/quick-start
     - theme: alt
       text: See Examples
-      link: /examples/minimal-setup
+      link: https://nicksoftware.github.io/switchboard-docs/examples/minimal-setup.html
     - theme: alt
       text: Why Switchboard?
       link: #why-i-built-this
 
 features:
   - icon: 🎯
-    title: Declarative & Type-Safe
-    details: Define flows with attributes or fluent builders. IntelliSense guides you, Roslyn analyzers catch errors before deployment.
+    title: Fluent & Type-Safe
+    details: Define flows, queues, and routing with a fluent API. IntelliSense guides you through every step.
 
   - icon: 🏗️
     title: Infrastructure as Code
     details: Version-controlled, reviewable, testable contact center config. Built on AWS CDK - no manual console clicking.
 
-  - icon: ⚡
-    title: Zero-Downtime Updates
-    details: Change flow parameters in DynamoDB without redeploying infrastructure. Update messages, routing rules, hours - instantly.
-
-  - icon: 🔍
-    title: Compile-Time Safety
-    details: Find bugs at build time, not runtime. Missing queues, broken references, invalid flows - all caught before deployment.
+  - icon: 🔗
+    title: Existing Instance Support
+    details: Create new Connect instances or manage existing ones. Import your current setup and start adding resources with code.
 
   - icon: 📦
     title: Simple Installation
     details: "One command: dotnet add package. No framework cloning, no complex setup. Install and start building."
 
+  - icon: 🔌
+    title: Lambda Integration
+    details: First-class support for Lambda functions in your flows. Build dynamic IVRs with customer lookups and business logic.
+
   - icon: 🚀
-    title: Production Battle-Tested
-    details: Multi-region, high availability, disaster recovery, monitoring, logging. Built for enterprise scale.
+    title: Complete Resource Management
+    details: Queues, flows, hours of operation, routing profiles, DynamoDB tables, and Lambda functions - all from code.
 ---
 
 ## Quick Example
 
 ```csharp
+using Switchboard.Infrastructure;
 
 var app = new SwitchboardApp();
-var uniqueAlias = "switchboard-demo-66890";
-var callCenter = app.CreateCallCenter("SimpleCallCenter", uniqueAlias);
 
+// Create a new Connect instance
+var callCenter = app.CreateCallCenter("MyCallCenter", "my-call-center");
 
-// 1. Create business hours (Mon-Fri 9am-5pm)
-var businessHours = new HoursOfOperation
-{
-    Name = "BusinessHours",
-    TimeZone = "America/New_York"
-};
+// Add business hours
+var businessHours = HoursOfOperation
+    .Create("Business Hours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build(callCenter);
 
-for (var day = DayOfWeek.Monday; day <= DayOfWeek.Friday; day++)
-{
-    businessHours.AddDayConfig(new HoursOfOperationConfig
-    {
-        Day = day,
-        StartTime = new TimeRange { Hours = 9, Minutes = 0 },
-        EndTime = new TimeRange { Hours = 17, Minutes = 0 }
-    });
-}
-
-callCenter
-.AddHoursOfOperation(businessHours);
-
-// 2. Create queues
-var salesQueue = new QueueBuilder()
-    .SetName(AcmeQueues.Sales)
-    .SetDescription("Sales inquiries queue")
+// Add queues
+var salesQueue = Queue
+    .Create("Sales")
+    .SetDescription("Sales inquiries")
     .SetMaxContacts(50)
-    .AddTag("Department", "Sales")
-    .Build();
+    .Build(callCenter, businessHours.HoursOfOperation.Name);
 
-var supportQueue = new QueueBuilder()
-    .SetName(AcmeQueues.Support)
-    .SetDescription("Technical support queue")
-    .SetMaxContacts(100)
-    .AddTag("Department", "Support")
-    .Build();
-
-
-callCenter.AddQueue(salesQueue, businessHours.Name);
-callCenter.AddQueue(supportQueue, businessHours.Name);
-
-var flow = new FlowBuilder()
-    .SetName("General Support Inbound")
+// Create a contact flow with IVR menu
+Flow
+    .Create("Main Menu")
     .SetType(FlowType.ContactFlow)
-    .SetDescription("Verifying stable construct IDs prevent resource replacement!")
-    .AddTag("Department", "Support")
-    .SetStatus("SAVED") // Use SAVED to skip validation for GetParticipantInput (AWS API limitation workaround)
-     .SetContactAttributes(config =>
-            {
-                config["support_queue"] = "support";
-            })
-    // 1. Welcome message (SSML)
-    .PlayPrompt(message =>
-    {
-        message.PromptType = PromptType.SSML;
-        message.SSML = "<speak>\nWelcome to the Nicksoftware general support line. We are looking forward to supporting you.\n</speak>";
-    })
-
-    // 2. Main menu with GetCustomerInput
-    .GetCustomerInput("For General Enquiries, press 1. For software support, press 2. For cloud support, press 3. To speak to an agent, press 4.", input =>
-    {
-        input.TimeoutSeconds = 5;
-        input.EncryptInput = false;
-        input.MaxDigits = 1;
-    })
-    .OnDefault(deflt => deflt.Disconnect())
-    .OnTimeout(timeout => timeout.Disconnect())
-    .OnError(error => error.Disconnect())
-    .OnDigit("1", generalEnquiries =>
-    {
-        generalEnquiries
-            .PlayPrompt("Your call is important to us please wait while we transfer you to our support agents")
-             .TransferToQueueDynamic("$.Attributes.support_queue")
-            .Disconnect();
-    })
-    // Digit 2: Software Support → Support queue
-    .OnDigit("2", softwareSupport =>
-    {
-        softwareSupport
-            .PlayPrompt("Your call is important to us please wait while we transfer you to our support agents")
-            .TransferToQueueDynamic("$.Attributes.support_queue")
-            .Disconnect();
-    })
-    // Digit 3: Temporarily removed TransferToThirdParty to test
-    .OnDigit("3", cloudSupport =>
-    {
-        cloudSupport
-            .PlayPrompt("Your call is important to us please wait while we transfer you to our cloud support specialists")
-            .TransferToThirdParty("+18005550199") // Example number
-            .Disconnect();
-    })
-    // Digit 4: Speak to Agent → Support queue
-    .OnDigit("4", speakToAgent =>
-    {
-        speakToAgent
-            .PlayPrompt("Your call is important to us please wait while we transfer you to our support agents")
-            .TransferToQueueDynamic("$.Attributes.support_queue")
-            .Disconnect();
-    })
+    .PlayPrompt("Welcome to our call center!")
+    .GetCustomerInput("Press 1 for sales, 2 for support.")
+    .OnDigit("1", sales => sales
+        .PlayPrompt("Transferring to sales...")
+        .TransferToQueue("Sales")
+        .Disconnect())
+    .OnDigit("2", support => support
+        .PlayPrompt("Transferring to support...")
+        .TransferToQueue("Support")
+        .Disconnect())
     .Disconnect()
-    .Build();
-
-callCenter.AddFlow(flow);
+    .Build(callCenter);
 
 app.Synth();
-
-public class AcmeQueues
-{
-    public const string Sales = "A-Sales";
-    public const string Support = "A-Support";
-};
-
 ```
 
 ## Installation
 
 ```bash
-dotnet add package NickSoftware.Switchboard --prerelease
+dotnet add package NickSoftware.Switchboard
 npm install -g aws-cdk
 ```
 
@@ -200,8 +123,7 @@ With a code-first approach:
 ✅ **Code is readable and understandable**—flows look like actual logic, not configuration soup
 ✅ **Real collaboration**—code reviews, pull requests, team development
 ✅ **Self-documenting**—the code speaks for itself about what gets created
-✅ **Compile-time safety**—find errors before deployment, not after
-✅ **Minimal boilerplate**—attributes and source generators handle the repetitive stuff
+✅ **Fluent API**—IntelliSense guides you through every configuration option
 ✅ **Built on CDK**—you still have full power to customize when needed
 ✅ **Version control that works**—meaningful diffs, rollback capability, audit trail
 

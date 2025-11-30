@@ -28,17 +28,17 @@ You'll create contact flows whenever you want to:
 
 Amazon Connect supports different types of flows for specific purposes:
 
-| Flow Type | Purpose | Example Use |
-|-----------|---------|-------------|
-| **Contact Flow** | Main inbound call flow | Primary phone menu, greeting, routing |
-| **Customer Queue Flow** | Plays while caller waits | "Your call is important to us..." |
-| **Customer Hold Flow** | Plays when agent puts caller on hold | Hold music |
-| **Customer Whisper Flow** | Plays to caller before connecting to agent | "Connecting you now..." |
-| **Agent Whisper Flow** | Plays to agent before connecting to caller | "Incoming call from Sales queue" |
-| **Agent Hold Flow** | Plays to agent while waiting | Agent hold music |
-| **Outbound Whisper Flow** | For outbound calls | "This is a call from Acme Corp" |
-| **Agent Transfer Flow** | Agent-to-agent transfers | Transfer between agents |
-| **Queue Transfer Flow** | Queue-to-queue transfers | Move caller between queues |
+| Flow Type                 | Purpose                                    | Example Use                           |
+| ------------------------- | ------------------------------------------ | ------------------------------------- |
+| **Contact Flow**          | Main inbound call flow                     | Primary phone menu, greeting, routing |
+| **Customer Queue Flow**   | Plays while caller waits                   | "Your call is important to us..."     |
+| **Customer Hold Flow**    | Plays when agent puts caller on hold       | Hold music                            |
+| **Customer Whisper Flow** | Plays to caller before connecting to agent | "Connecting you now..."               |
+| **Agent Whisper Flow**    | Plays to agent before connecting to caller | "Incoming call from Sales queue"      |
+| **Agent Hold Flow**       | Plays to agent while waiting               | Agent hold music                      |
+| **Outbound Whisper Flow** | For outbound calls                         | "This is a call from Acme Corp"       |
+| **Agent Transfer Flow**   | Agent-to-agent transfers                   | Transfer between agents               |
+| **Queue Transfer Flow**   | Queue-to-queue transfers                   | Move caller between queues            |
 
 ---
 
@@ -46,9 +46,9 @@ Amazon Connect supports different types of flows for specific purposes:
 
 Switchboard gives you **two approaches** to build contact flows in C#. Both create the same Amazon Connect flows - just pick the style you prefer!
 
-### Approach 1: Fluent Builder (Recommended for Beginners)
+### Approach 1: Fluent API (Recommended for Beginners)
 
-The **Fluent Builder** approach uses method chaining to build flows step-by-step. It's great for:
+The **Fluent API** approach uses method chaining to build flows step-by-step. It's great for:
 
 - Learning contact flow concepts
 - Building simple flows quickly
@@ -58,8 +58,7 @@ The **Fluent Builder** approach uses method chaining to build flows step-by-step
 **Example:**
 
 ```csharp
-var flow = new FlowBuilder()
-    .SetName("SimpleSalesFlow")
+var flow = Flow.Create("SimpleSalesFlow")
     .PlayPrompt("Welcome to sales!")
     .TransferToQueue("Sales")
     .Disconnect()
@@ -67,12 +66,14 @@ var flow = new FlowBuilder()
 ```
 
 **Pros:**
+
 - Easy to read and understand
 - IntelliSense guides you through available actions
 - No special syntax to learn
 - Great for debugging
 
 **Cons:**
+
 - More verbose for complex flows
 - No compile-time validation of flow structure
 
@@ -108,17 +109,19 @@ public partial class SalesFlow : FlowDefinitionBase
 ```
 
 **Pros:**
+
 - Clean, declarative syntax
 - Compile-time validation (catches errors early)
 - Auto-generated boilerplate code
 - Great for complex flows
 
 **Cons:**
+
 - Requires understanding of attributes and source generators
 - Steeper learning curve
 - Less intuitive for beginners
 
-**For the rest of this guide, we'll focus on the Fluent Builder approach.** Once you're comfortable with flow concepts, check out the [Attribute-Based Flows](/guide/flows/attribute-based) guide.
+**For the rest of this guide, we'll focus on the Fluent API approach.** Once you're comfortable with flow concepts, check out the [Attribute-Based Flows](/guide/flows/attribute-based) guide.
 
 ---
 
@@ -143,7 +146,7 @@ var stack = new SwitchboardStack(app, "MyFirstFlow", "my-contact-center");
 Build a simple flow using `FlowBuilder`:
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("WelcomeFlow")
     .PlayPrompt("Thank you for calling. Please hold while we connect you to an agent.")
     .TransferToQueue("GeneralSupport")
@@ -151,6 +154,7 @@ var flow = new FlowBuilder()
 ```
 
 **What this does:**
+
 1. Creates a flow named "WelcomeFlow"
 2. Plays a greeting message to the caller
 3. Transfers the caller to the "GeneralSupport" queue
@@ -175,7 +179,7 @@ stack.AddQueue(queue);
 stack.AddFlow(flow); // Must add queue before flow!
 ```
 
-**Important:** Add the queue *before* the flow because the flow references the queue.
+**Important:** Add the queue _before_ the flow because the flow references the queue.
 
 ### Step 5: Deploy
 
@@ -209,7 +213,7 @@ var queue = new QueueBuilder()
     .Build();
 
 // Create flow
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("WelcomeFlow")
     .PlayPrompt("Thank you for calling. Please hold while we connect you to an agent.")
     .TransferToQueue("GeneralSupport")
@@ -236,6 +240,7 @@ Now let's explore the different actions you can add to your flows. Each action d
 Speaks text to the caller using Amazon Polly text-to-speech.
 
 **When to use:**
+
 - Greeting callers
 - Providing information
 - Explaining menu options
@@ -244,7 +249,7 @@ Speaks text to the caller using Amazon Polly text-to-speech.
 **Basic Example:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("GreetingFlow")
     .PlayPrompt("Welcome to Acme Corporation!")
     .Build();
@@ -253,13 +258,14 @@ var flow = new FlowBuilder()
 **With Custom Identifier:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("GreetingFlow")
     .PlayPrompt("Welcome to Acme Corporation!", "welcome-message")
     .Build();
 ```
 
 **Tips:**
+
 - Keep messages short and clear
 - Speak naturally (Amazon Polly sounds best with natural language)
 - Avoid spelling out words unless necessary
@@ -271,6 +277,7 @@ var flow = new FlowBuilder()
 Collects DTMF input (button presses) from the caller.
 
 **When to use:**
+
 - Building IVR menus ("Press 1 for Sales...")
 - Collecting account numbers
 - Getting confirmation (Press 1 to confirm)
@@ -279,7 +286,7 @@ Collects DTMF input (button presses) from the caller.
 **Basic Example:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("MenuFlow")
     .GetCustomerInput("Press 1 for sales, 2 for support, or 3 for billing")
     .Build();
@@ -288,7 +295,7 @@ var flow = new FlowBuilder()
 **Advanced Configuration:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("AccountNumberFlow")
     .GetCustomerInput("Please enter your 10-digit account number", input =>
     {
@@ -300,11 +307,13 @@ var flow = new FlowBuilder()
 ```
 
 **Configuration Options:**
+
 - `MaxDigits` - Maximum number of digits to collect (default: 1)
 - `TimeoutSeconds` - How long to wait for input (default: 5)
 - `EncryptInput` - Whether to encrypt the input for security (default: false)
 
 **Tips:**
+
 - Use short timeout (5-10 seconds) for single-digit input
 - Use longer timeout (15-30 seconds) for account numbers
 - Always encrypt sensitive data like account numbers or PINs
@@ -316,6 +325,7 @@ var flow = new FlowBuilder()
 Transfers the caller to a queue where they'll wait for an available agent.
 
 **When to use:**
+
 - Connecting callers to agents
 - Routing to specific departments
 - After IVR menu selection
@@ -323,7 +333,7 @@ Transfers the caller to a queue where they'll wait for an available agent.
 **Basic Example:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("TransferFlow")
     .PlayPrompt("Transferring you to our sales team")
     .TransferToQueue("Sales")
@@ -333,7 +343,7 @@ var flow = new FlowBuilder()
 **With Custom Identifier:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("TransferFlow")
     .PlayPrompt("Transferring you to our sales team")
     .TransferToQueue("Sales", "transfer-to-sales")
@@ -341,6 +351,7 @@ var flow = new FlowBuilder()
 ```
 
 **What happens:**
+
 1. The flow automatically adds a "SetQueue" action before the transfer
 2. The caller enters the specified queue
 3. Queue music/announcements play while waiting
@@ -364,6 +375,7 @@ stack.AddFlow(flow); // Now the flow can reference "Sales" queue
 Routes the call to different actions based on conditions or customer input.
 
 **When to use:**
+
 - IVR menu routing ("If they pressed 1, go here...")
 - VIP customer routing
 - Conditional business logic
@@ -372,7 +384,7 @@ Routes the call to different actions based on conditions or customer input.
 **Simple IVR Menu:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("MainMenu")
     .GetCustomerInput("Press 1 for sales, 2 for support, or 3 for billing")
     .Branch(branch =>
@@ -388,7 +400,7 @@ var flow = new FlowBuilder()
 **Advanced Conditional Routing:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("VIPRouter")
     .InvokeLambda("CustomerLookup")
     .Branch(branch =>
@@ -409,6 +421,7 @@ var flow = new FlowBuilder()
 ```
 
 **Comparison Operators:**
+
 - `Equals` - Exact match (==)
 - `NotEquals` - Not equal (!=)
 - `GreaterThan` - Numeric comparison (>)
@@ -426,6 +439,7 @@ var flow = new FlowBuilder()
 Calls an AWS Lambda function to fetch data or perform logic outside the contact flow.
 
 **When to use:**
+
 - Looking up customer information
 - Checking account balances
 - Validating input
@@ -435,7 +449,7 @@ Calls an AWS Lambda function to fetch data or perform logic outside the contact 
 **Basic Example:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("CustomerLookup")
     .InvokeLambda("GetCustomerInfo")
     .Build();
@@ -444,7 +458,7 @@ var flow = new FlowBuilder()
 **With Timeout Configuration:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("CustomerLookup")
     .InvokeLambda("GetCustomerInfo", lambda =>
     {
@@ -454,6 +468,7 @@ var flow = new FlowBuilder()
 ```
 
 **What happens:**
+
 1. Flow pauses and calls your Lambda function
 2. Lambda receives contact attributes and custom parameters
 3. Lambda returns data (customer info, account status, etc.)
@@ -461,6 +476,7 @@ var flow = new FlowBuilder()
 5. Flow continues with the Lambda response data
 
 **Tips:**
+
 - Keep Lambda functions fast (under 3 seconds if possible)
 - Set appropriate timeouts (3-8 seconds)
 - Return data in contact attributes for use later in the flow
@@ -473,6 +489,7 @@ var flow = new FlowBuilder()
 Sets custom attributes on the contact that persist throughout the call lifecycle.
 
 **When to use:**
+
 - Storing customer information for later use
 - Passing data between flow actions
 - Tracking call metadata
@@ -481,7 +498,7 @@ Sets custom attributes on the contact that persist throughout the call lifecycle
 **Basic Example:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("SetCustomerInfo")
     .SetContactAttributes(attrs =>
     {
@@ -495,7 +512,7 @@ var flow = new FlowBuilder()
 **After Lambda Lookup:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("EnrichCustomerData")
     .InvokeLambda("CustomerLookup")
     .SetContactAttributes(attrs =>
@@ -508,6 +525,7 @@ var flow = new FlowBuilder()
 ```
 
 **What happens:**
+
 - Attributes are stored on the contact record
 - Available to all subsequent actions in the flow
 - Visible to agents in the Contact Control Panel (CCP)
@@ -515,6 +533,7 @@ var flow = new FlowBuilder()
 - Included in contact trace records (CTRs)
 
 **Tips:**
+
 - Use clear, descriptive attribute names
 - Set attributes early in the flow for routing decisions
 - Limit to essential data (attributes have size limits)
@@ -526,6 +545,7 @@ var flow = new FlowBuilder()
 Checks if the current time falls within your configured business hours.
 
 **When to use:**
+
 - Routing calls differently during/after business hours
 - Playing after-hours messages
 - Directing to voicemail when closed
@@ -534,7 +554,7 @@ Checks if the current time falls within your configured business hours.
 **Basic Example:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("BusinessHoursCheck")
     .CheckHoursOfOperation("MainOfficeHours")
     .Build();
@@ -543,7 +563,7 @@ var flow = new FlowBuilder()
 **With Conditional Routing:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("HoursRouter")
     .CheckHoursOfOperation("BusinessHours")
     .Branch(branch =>
@@ -576,7 +596,7 @@ hours.AddDayConfig(new HoursOfOperationConfig
 stack.AddHoursOfOperation(hours);
 
 // Use in flow
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("HoursCheck")
     .CheckHoursOfOperation("BusinessHours")
     .PlayPrompt("We are currently open")
@@ -585,6 +605,7 @@ var flow = new FlowBuilder()
 ```
 
 **What happens:**
+
 - Flow checks current time against the hours schedule
 - Sets `$.HoursOfOperation.IsOpen` attribute (true/false)
 - You can branch based on this attribute
@@ -598,6 +619,7 @@ var flow = new FlowBuilder()
 Ends the contact (hangs up the call).
 
 **When to use:**
+
 - After playing a final message
 - At the end of every flow path
 - After completing actions that don't transfer to an agent
@@ -605,7 +627,7 @@ Ends the contact (hangs up the call).
 **Basic Example:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("AfterHoursFlow")
     .PlayPrompt("We are currently closed. Please call back during business hours.")
     .Disconnect()
@@ -615,7 +637,7 @@ var flow = new FlowBuilder()
 **With Custom Identifier:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("AfterHoursFlow")
     .PlayPrompt("We are currently closed. Please call back during business hours.")
     .Disconnect("end-call")
@@ -623,6 +645,7 @@ var flow = new FlowBuilder()
 ```
 
 **Important:** Every flow path must end with either:
+
 - `Disconnect()` - Hangs up the call
 - `TransferToQueue()` - Sends to a queue
 - `TransferToFlow()` - Transfers to another flow
@@ -631,7 +654,7 @@ var flow = new FlowBuilder()
 
 ```csharp
 // WRONG - Flow has no ending
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("IncompleteFlow")
     .PlayPrompt("Hello")
     .Build(); // Missing Disconnect() or Transfer!
@@ -641,7 +664,7 @@ var flow = new FlowBuilder()
 
 ```csharp
 // CORRECT - Flow ends properly
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("CompleteFlow")
     .PlayPrompt("Hello")
     .Disconnect()
@@ -659,7 +682,7 @@ Now that you know the basic actions, let's build some real-world contact flows.
 A phone menu with multiple levels of options:
 
 ```csharp
-var mainMenu = new FlowBuilder()
+var mainMenu = Flow.Create("Flow")
     .SetName("MainMenu")
     .PlayPrompt("Welcome to Acme Corporation")
     .GetCustomerInput("Press 1 for sales, 2 for support, or 3 for billing")
@@ -672,7 +695,7 @@ var mainMenu = new FlowBuilder()
     })
     .Build();
 
-var salesSubmenu = new FlowBuilder()
+var salesSubmenu = Flow.Create("Flow")
     .SetName("SalesSubmenu")
     .GetCustomerInput("Press 1 for new customers, 2 for existing customers")
     .Branch(branch =>
@@ -685,6 +708,7 @@ var salesSubmenu = new FlowBuilder()
 ```
 
 **Tips for Multi-Level IVRs:**
+
 - Keep menus shallow (2-3 levels maximum)
 - Limit options to 3-5 per menu
 - Always provide an "other" or "operator" option
@@ -697,7 +721,7 @@ var salesSubmenu = new FlowBuilder()
 Offer callers the option to receive a callback instead of waiting:
 
 ```csharp
-var callbackFlow = new FlowBuilder()
+var callbackFlow = Flow.Create("Flow")
     .SetName("CallbackOffer")
     .GetCustomerInput("Press 1 to hold for the next agent, or press 2 to receive a callback")
     .Branch(branch =>
@@ -716,7 +740,7 @@ var callbackFlow = new FlowBuilder()
 Route VIP customers differently:
 
 ```csharp
-var vipRouter = new FlowBuilder()
+var vipRouter = Flow.Create("Flow")
     .SetName("VIPRouter")
     .PlayPrompt("Please hold while we look up your account")
     .InvokeLambda("CustomerLookup", lambda =>
@@ -753,7 +777,7 @@ var vipRouter = new FlowBuilder()
 Greet customers by name using Lambda lookup:
 
 ```csharp
-var personalizedGreeting = new FlowBuilder()
+var personalizedGreeting = Flow.Create("Flow")
     .SetName("PersonalizedGreeting")
     .InvokeLambda("GetCustomerName", lambda =>
     {
@@ -783,7 +807,7 @@ var personalizedGreeting = new FlowBuilder()
 **Problem:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("IncompleteFlow")
     .PlayPrompt("Thank you")
     .Build(); // No ending!
@@ -794,7 +818,7 @@ var flow = new FlowBuilder()
 **Solution:** Always end flows with `Disconnect()` or `TransferToQueue()`:
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("CompleteFlow")
     .PlayPrompt("Thank you")
     .Disconnect()
@@ -808,7 +832,7 @@ var flow = new FlowBuilder()
 **Problem:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("BadFlow")
     .TransferToQueue("Sales")
     .PlayPrompt("This will never play") // Dead code after transfer!
@@ -826,7 +850,7 @@ var flow = new FlowBuilder()
 **Problem:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("BadFlow")
     .TransferToQueue("NonExistentQueue") // Queue doesn't exist!
     .Build();
@@ -855,13 +879,13 @@ stack.AddFlow(flow);   // Then add flow
 
 ```csharp
 // Flow A transfers to Flow B
-var flowA = new FlowBuilder()
+var flowA = Flow.Create("Flow")
     .SetName("FlowA")
     .TransferToFlow("FlowB")
     .Build();
 
 // Flow B transfers back to Flow A
-var flowB = new FlowBuilder()
+var flowB = Flow.Create("Flow")
     .SetName("FlowB")
     .TransferToFlow("FlowA") // Circular reference!
     .Build();
@@ -878,7 +902,7 @@ var flowB = new FlowBuilder()
 **Problem:**
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("IncompleteMenu")
     .GetCustomerInput("Press 1 or 2")
     .Branch(branch =>
@@ -895,7 +919,7 @@ var flow = new FlowBuilder()
 **Solution:** Always include `Otherwise()` for unexpected input:
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("CompleteMenu")
     .GetCustomerInput("Press 1 or 2")
     .Branch(branch =>
@@ -925,7 +949,7 @@ Now that you understand contact flows, explore these related topics:
 ### Basic Flow Template
 
 ```csharp
-var flow = new FlowBuilder()
+var flow = Flow.Create("Flow")
     .SetName("FlowName")
     .SetDescription("Optional description")
     .SetType(FlowType.ContactFlow)

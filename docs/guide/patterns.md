@@ -4,433 +4,163 @@ Common patterns and best practices for building contact centers with Switchboard
 
 ## Overview
 
-This guide shows practical patterns for organizing and building your contact center infrastructure with Switchboard. These are real-world patterns you'll use every day, not academic design patterns.
-
----
-
-## Attribute-Based Flow Definition
-
-Define contact flows declaratively using C# attributes. The framework generates implementation code automatically via source generators.
-
-### When to Use
-
-- You prefer declarative, minimal-code approaches
-- Flows have a relatively static structure
-- You want compile-time validation via Roslyn analyzers
-- You prefer letting the framework handle boilerplate
-
-### Pattern
-
-```csharp
-[ContactFlow("CustomerService")]
-public partial class CustomerServiceFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message("Welcome to customer service")]
-    public partial void Welcome();
-
-    [Action(Order = 2)]
-    [GetCustomerInput]
-    [Prompt("Press 1 for sales, 2 for support")]
-    [MaxDigits(1)]
-    public partial Task<string> GetMenuChoice();
-
-    [Action(Order = 3)]
-    [Branch(AttributeName = "MenuChoice")]
-    [Case("1", Target = "TransferToSales")]
-    [Case("2", Target = "TransferToSupport")]
-    public partial void RouteCall();
-
-    [Action(Order = 4, Id = "TransferToSales")]
-    [TransferToQueue("Sales")]
-    public partial void TransferToSales();
-
-    [Action(Order = 5, Id = "TransferToSupport")]
-    [TransferToQueue("Support")]
-    public partial void TransferToSupport();
-}
-```
-
-### Benefits
-
-- ✅ Minimal code required
-- ✅ Source generator creates everything
-- ✅ Compile-time validation via analyzers
-- ✅ Easy to read and maintain
-
-### Trade-offs
-
-- ⚠️ Less flexible for dynamic scenarios
-- ⚠️ Relies on source generator magic (less explicit)
-- ⚠️ Static structure defined at compile-time
+This guide shows practical patterns for organizing and building your contact center infrastructure with Switchboard. These are real-world patterns you'll use every day.
 
 ---
 
 ## Fluent Builder Pattern
 
-Build contact flows programmatically using a chainable, type-safe API. Gives you full control over flow construction.
+Build contact flows programmatically using a chainable, type-safe API. This is the primary pattern for building flows in Switchboard.
 
 ### When to Use
 
-- You prefer imperative, programmatic approaches
-- Flow structure needs to be dynamic based on runtime conditions
-- You want explicit control without "magic" code generation
-- You need to build flows from external configuration/databases
-- Advanced scenarios requiring conditional logic
+- Building any contact flow
+- Creating IVR menus with branching
+- Integrating with Lambda functions
+- All production use cases
 
 ### Pattern
 
 ```csharp
-public class DynamicSalesFlow
-{
-    private readonly IFlowBuilder _builder;
-    private readonly IConfiguration _config;
+using Switchboard.Infrastructure;
 
-    public DynamicSalesFlow(IFlowBuilder builder, IConfiguration config)
+var app = new SwitchboardApp();
+var callCenter = app.CreateCallCenter("MyCallCenter", "my-call-center");
+
+// Create a flow with fluent builder
+Flow
+    .Create("CustomerService")
+    .SetType(FlowType.ContactFlow)
+    .SetDescription("Main customer service flow")
+    .PlayPrompt("Welcome to customer service")
+    .GetCustomerInput("Press 1 for sales, 2 for support.", input =>
     {
-        _builder = builder;
-        _config = config;
-    }
+        input.TimeoutSeconds = 5;
+    })
+    .OnDigit("1", sales => sales
+        .PlayPrompt("Transferring to sales...")
+        .TransferToQueue("Sales")
+        .Disconnect())
+    .OnDigit("2", support => support
+        .PlayPrompt("Transferring to support...")
+        .TransferToQueue("Support")
+        .Disconnect())
+    .OnDefault(defaultPath => defaultPath
+        .PlayPrompt("Invalid selection.")
+        .Disconnect())
+    .OnTimeout(timeout => timeout
+        .PlayPrompt("No input received.")
+        .Disconnect())
+    .Disconnect()
+    .Build(callCenter);
 
-    public ContactFlow Build()
-    {
-        var flow = _builder
-            .SetName("DynamicSales")
-            .PlayPrompt("Welcome!");
-
-        // Add VIP routing if enabled in config
-        if (_config.GetValue<bool>("Features:VipRouting"))
-        {
-            flow
-                .Branch("CustomerTier")
-                .WhenEquals("VIP", vip => vip.TransferToQueue("VIP-Sales"))
-                .Otherwise(standard => standard.TransferToQueue("Standard-Sales"));
-        }
-        else
-        {
-            flow.TransferToQueue("Sales");
-        }
-
-        return flow.Build();
-    }
-}
+app.Synth();
 ```
 
 ### Benefits
 
-- ✅ Full programmatic control
-- ✅ Can use dependency injection naturally
-- ✅ Dynamic behavior based on runtime conditions
-- ✅ Type-safe with IntelliSense
-- ✅ Explicit code (no generated files to inspect)
-
-### Trade-offs
-
-- ⚠️ More verbose than attributes
-- ⚠️ More boilerplate code to write
-- ⚠️ Some Validations happens at runtime, not compile-time (if you use lambdas to fetch configurations in the flows etc)
+- Full programmatic control
+- Type-safe with IntelliSense
+- Explicit code with clear flow of execution
+- Easy to read and understand
+- Works with Lambda functions and branching
 
 ---
 
-## Hybrid Pattern (Attributes + Fluent)
+## Chained Configuration Pattern
 
-**The best of both worlds.** Combine both approaches in the same flow to leverage the strengths of each.
+Add all resources to a call center in a single fluent chain for clean, readable configuration.
 
 ### When to Use
 
-- Production applications with mixed complexity
-- Flows with a standard structure but some dynamic parts
-- You want attributes for simple/static parts, fluent API for complex/dynamic logic
-- Ideal when different team members have different preferences
+- Setting up a new call center
+- Adding multiple related resources
+- When you want concise, readable code
 
 ### Pattern
 
 ```csharp
-[ContactFlow("EnterpriseSupport")]
-public partial class EnterpriseSupportFlow : FlowDefinitionBase
-{
-    private readonly IAuthService _authService;
-    private readonly IFlowBuilder _builder;
+var app = new SwitchboardApp();
+var callCenter = app.CreateCallCenter("ChainedExample", "chained-example");
 
-    public EnterpriseSupportFlow(IAuthService authService, IFlowBuilder builder)
-    {
-        _authService = authService;
-        _builder = builder;
-    }
+callCenter
+    .AddHoursOfOperation("Business Hours", h => h
+        .WithTimeZone("America/New_York")
+        .WithStandardBusinessHours())
+    .AddQueue("Sales", "Business Hours", q => q
+        .SetDescription("Sales inquiries")
+        .SetMaxContacts(50))
+    .AddQueue("Support", "Business Hours", q => q
+        .SetDescription("Customer support")
+        .SetMaxContacts(100))
+    .AddFlow("MainMenu", f => f
+        .SetType(FlowType.ContactFlow)
+        .PlayPrompt("Welcome!")
+        .GetCustomerInput("Press 1 for sales, 2 for support.")
+        .OnDigit("1", sales => sales.TransferToQueue("Sales").Disconnect())
+        .OnDigit("2", support => support.TransferToQueue("Support").Disconnect())
+        .Disconnect());
 
-    // Simple steps use attributes
-    [Action(Order = 1)]
-    [Message("Welcome to enterprise support")]
-    public partial void Welcome();
-
-    [Action(Order = 2)]
-    [GetCustomerInput]
-    [Prompt("Please enter your account number")]
-    [MaxDigits(10)]
-    [EncryptInput(true)]
-    public partial Task<string> GetAccountNumber();
-
-    // Complex authentication uses fluent builder
-    [Action(Order = 3)]
-    public ContactFlowAction Authenticate()
-    {
-        return _builder
-            .InvokeLambda(_authService.ValidateAccount)
-            .OnSuccess(success => success
-                .SetAttribute("IsAuthenticated", "true")
-                .SetAttribute("AccountType", "{{Lambda.AccountType}}"))
-            .OnError(error => error
-                .PlayPrompt("Authentication failed. Transferring to agent.")
-                .TransferToQueue("VerificationQueue"))
-            .Build();
-    }
-
-    [Action(Order = 4)]
-    [TransferToQueue("EnterpriseSupport")]
-    public partial void TransferToSupport();
-}
+app.Synth();
 ```
 
 ### Benefits
 
-- Clear and readable for simple parts
-- Powerful for complex parts
-- Full dependency injection support
-- Best of both worlds
+- Clean, readable code
+- All resources defined in one place
+- Method chaining reduces boilerplate
+- Easy to see the complete configuration
 
 ---
 
-## Modular Flow Composition
+## Existing Instance Pattern
 
-Break large flows into reusable modules.
-
-### When to Use
-
-- Authentication logic used across multiple flows
-- Business hours checks needed everywhere
-- Customer verification shared between flows
-- Any logic you'll reuse
-
-### Pattern
-
-```csharp
-// Reusable authentication module
-[FlowModule("Authentication")]
-public partial class AuthenticationModule : FlowModuleBase
-{
-    [Step(Order = 1)]
-    [GetCustomerInput]
-    [Prompt("Enter your customer ID")]
-    [MaxDigits(8)]
-    public partial Task<string> GetCustomerId();
-
-    [Step(Order = 2)]
-    [InvokeLambda("ValidateCustomer")]
-    [InputParameter("customerId", AttributeRef = "CustomerId")]
-    [OutputAttribute("IsValid")]
-    public partial Task<ValidationResult> Validate();
-
-    [Step(Order = 3)]
-    [Branch(AttributeName = "IsValid")]
-    [Case("true", ExitModule = true)]
-    [Case("false", Target = "Retry")]
-    public partial void CheckValidation();
-
-    [Step(Order = 4, Id = "Retry")]
-    [Disconnect(Reason = "Authentication failed")]
-    public partial void FailedAuth();
-}
-
-// Use the module in multiple flows
-[ContactFlow("SecureSales")]
-public partial class SecureSalesFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message("Welcome to secure sales")]
-    public partial void Welcome();
-
-    [Action(Order = 2)]
-    [UseModule(typeof(AuthenticationModule))]
-    public partial void Authenticate();
-
-    [Action(Order = 3)]
-    [TransferToQueue("Sales")]
-    public partial void Transfer();
-}
-```
-
-### Benefits
-
-- DRY principle
-- Consistent authentication/validation across flows
-- Test modules independently
-- Update in one place, affects all flows
-
----
-
-## Multi-Environment Configuration
-
-Manage different configs for dev, staging, and production.
-
-### When to Use
-
-- Always in production applications
-- Different phone numbers per environment
-- Different Lambda ARNs per environment
-- Environment-specific queue settings
-
-### Pattern
-
-```csharp
-// appsettings.Development.json
-{
-  "Switchboard": {
-    "Environment": "Development",
-    "Connect": {
-      "InstanceName": "dev-call-center",
-      "PhoneNumber": "+1-555-TEST-001"
-    },
-    "Features": {
-      "VipRouting": false,
-      "AdvancedAnalytics": false
-    }
-  }
-}
-
-// appsettings.Production.json
-{
-  "Switchboard": {
-    "Environment": "Production",
-    "Connect": {
-      "InstanceName": "prod-call-center",
-      "PhoneNumber": "+1-800-COMPANY"
-    },
-    "Features": {
-      "VipRouting": true,
-      "AdvancedAnalytics": true
-    }
-  }
-}
-
-// Program.cs
-builder.Services.AddSwitchboard(options =>
-{
-    options.Environment = builder.Configuration["Switchboard:Environment"];
-    options.InstanceName = builder.Configuration["Switchboard:Connect:InstanceName"];
-})
-.AddFlowDefinitions(typeof(Program).Assembly)
-.AddDynamicConfiguration(config =>
-{
-    config.UseDynamoDB();
-    config.TableName = $"switchboard-config-{options.Environment}";
-});
-```
-
-### Benefits
-
-- Same code, different configs
-- Easy CI/CD deployment
-- Isolate dev/staging/prod
-- Feature flags per environment
-
----
-
-## Dynamic Runtime Configuration
-
-Update flow behavior without redeployment.
-
-### When to Use
-
-- Frequently changing business hours
-- Queue timeouts that need adjustment
-- Promotional messages that change
-- A/B testing different flows
-
-### Pattern
-
-```csharp
-// Define flow with runtime config
-[ContactFlow("ConfigurableSupport")]
-public partial class ConfigurableSupportFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message(DynamicText = "WelcomeMessage")] // Loaded from DynamoDB
-    public partial void Welcome();
-
-    [Action(Order = 2)]
-    [SetWorkingQueue]
-    [QueueArn(Dynamic = "SupportQueueArn")] // Runtime lookup
-    [TimeoutSeconds(Dynamic = "QueueTimeout")] // Configurable timeout
-    public partial void SetQueue();
-
-    [Action(Order = 3)]
-    [TransferToQueue(Dynamic = "SupportQueueArn")]
-    public partial void Transfer();
-}
-
-// Update config at runtime via API/CLI
-await configManager.UpdateAsync("ConfigurableSupport", new
-{
-    WelcomeMessage = "Welcome! We're experiencing high call volume.",
-    QueueTimeout = 300, // Changed from 180 to 300
-    SupportQueueArn = "arn:aws:connect:us-east-1:xxx:queue/support"
-});
-
-// Next call uses new values immediately - no redeployment
-```
-
-### Benefits
-
-- Zero-downtime updates
-- Business users can change messages
-- Adjust to real-time conditions
-- A/B test different configurations
-
----
-
-## Existing Instance Migration
-
-Import and manage existing Amazon Connect resources.
+Work with existing Amazon Connect instances without creating new ones.
 
 ### When to Use
 
 - Migrating from console-managed to code-managed
-- Taking over an existing contact center
+- Adding resources to an existing contact center
 - Hybrid approach (manage some resources, import others)
 
 ### Pattern
 
 ```csharp
-builder.Services.AddSwitchboard(options =>
-{
-    // Import existing instance
-    options.ImportExistingInstance = true;
-    options.ExistingInstanceId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+var app = new SwitchboardApp();
 
-    // Manage flows with code, leave queues as-is
-    options.ManageFlows = true;
-    options.ManageQueues = false;
-    options.ManageRoutingProfiles = false;
-})
-.ImportExistingQueues(import =>
-{
-    // Reference existing queues by ARN
-    import.AddQueue("Sales", "arn:aws:connect:...:queue/sales");
-    import.AddQueue("Support", "arn:aws:connect:...:queue/support");
-});
+// Use an existing Connect instance by ARN
+var callCenter = app.UseExistingCallCenter(
+    "MyStack",
+    "arn:aws:connect:us-east-1:123456789012:instance/abc-123",
+    "my-existing-call-center"
+);
 
-// Now you can reference existing queues in new flows
-[ContactFlow("NewManagedFlow")]
-public partial class NewFlow : FlowDefinitionBase
-{
-    [Action(Order = 1)]
-    [Message("This is a new code-managed flow")]
-    public partial void Welcome();
+// Add new resources to your existing instance
+var hours = HoursOfOperation
+    .Create("Extended Hours")
+    .WithTimeZone("America/New_York")
+    .AddDay(DayOfWeek.Monday, "07:00", "21:00")
+    .AddDay(DayOfWeek.Tuesday, "07:00", "21:00")
+    .AddDay(DayOfWeek.Wednesday, "07:00", "21:00")
+    .AddDay(DayOfWeek.Thursday, "07:00", "21:00")
+    .AddDay(DayOfWeek.Friday, "07:00", "21:00")
+    .Build(callCenter);
 
-    [Action(Order = 2)]
-    [TransferToQueue("Sales")] // References imported queue
-    public partial void Transfer();
-}
+Queue
+    .Create("NewSalesQueue")
+    .SetDescription("New sales queue for expansion")
+    .SetMaxContacts(100)
+    .Build(callCenter, hours.HoursOfOperation.Name);
+
+Flow
+    .Create("NewFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome to our new service!")
+    .TransferToQueue("NewSalesQueue")
+    .Disconnect()
+    .Build(callCenter);
+
+app.Synth();
 ```
 
 ### Benefits
@@ -442,47 +172,349 @@ public partial class NewFlow : FlowDefinitionBase
 
 ---
 
+## Lambda Integration Pattern
+
+Integrate Lambda functions for dynamic behavior like customer lookups and authentication.
+
+### When to Use
+
+- Customer authentication
+- Database lookups
+- External API calls
+- Any dynamic logic in your flows
+
+### Pattern
+
+```csharp
+var app = new SwitchboardApp();
+var callCenter = app.CreateCallCenter("AuthExample", "auth-example");
+
+// Create DynamoDB table for customer data
+var accountsTable = DynamoDbTable
+    .Create("customer-accounts")
+    .WithPartitionKey("AccountNumber")
+    .WithOnDemandBilling()
+    .ExportTableName()
+    .Build(callCenter);
+
+// Create Lambda for account validation
+var validateLambda = ConnectLambda
+    .Create("validate-account")
+    .WithCode("./Lambda/ValidateAccount/bin/Release/net8.0/publish")
+    .WithDotNetHandler("ValidateAccount", "ValidateAccount.Function")
+    .WithTableRead(accountsTable.Table, "ACCOUNTS_TABLE_NAME")
+    .AssociateWithConnect(callCenter.InstanceId)
+    .ExportArn()
+    .Build(callCenter);
+
+// Use Lambda in a flow
+Flow
+    .Create("AuthFlow")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Please enter your account number.")
+    .StoreCustomerInput("Enter account number", input =>
+    {
+        input.MaxDigits = 10;
+        input.CustomTerminatingKeypress = "#";
+    })
+    .OnSuccess(success => success
+        .SetContactAttributes(attrs =>
+        {
+            attrs["AccountNumber"] = Attributes.System(SystemAttributes.StoredCustomerInput);
+        })
+        .InvokeLambda(validateLambda.FunctionArn, validateLambda.FunctionName, lambda =>
+        {
+            lambda.InputParameters["AccountNumber"] = Attributes.Contact("AccountNumber");
+        })
+        .OnSuccess(valid => valid
+            .PlayPrompt($"Welcome back, {Attributes.External("CustomerName")}!")
+            .TransferToQueue("Support")
+            .Disconnect())
+        .OnError(invalid => invalid
+            .PlayPrompt("Account not found.")
+            .Disconnect())
+        .ThenContinue())
+    .OnError(error => error
+        .PlayPrompt("Invalid input.")
+        .Disconnect())
+    .Disconnect()
+    .Build(callCenter);
+
+app.Synth();
+```
+
+### Benefits
+
+- Dynamic customer data
+- Secure PIN verification
+- External system integration
+- Personalized caller experience
+
+---
+
+## Multi-Queue Routing Pattern
+
+Create multiple queues with different priorities and routing profiles.
+
+### When to Use
+
+- Different service levels (VIP, standard)
+- Multiple departments
+- Skills-based routing
+- Overflow handling
+
+### Pattern
+
+```csharp
+var app = new SwitchboardApp();
+var callCenter = app.CreateCallCenter("MultiQueue", "multi-queue");
+
+// Create hours of operation
+var hours = HoursOfOperation
+    .Create("Business Hours")
+    .WithTimeZone("America/New_York")
+    .WithStandardBusinessHours()
+    .Build(callCenter);
+
+// Create multiple queues
+var salesQueue = Queue
+    .Create("Sales")
+    .SetDescription("Sales inquiries")
+    .SetMaxContacts(50)
+    .AddTag("Department", "Sales")
+    .Build(callCenter, hours.HoursOfOperation.Name);
+
+var supportQueue = Queue
+    .Create("Support")
+    .SetDescription("Technical support")
+    .SetMaxContacts(100)
+    .AddTag("Department", "Support")
+    .Build(callCenter, hours.HoursOfOperation.Name);
+
+var vipQueue = Queue
+    .Create("VIP")
+    .SetDescription("VIP customers")
+    .SetMaxContacts(25)
+    .AddTag("Priority", "High")
+    .Build(callCenter, hours.HoursOfOperation.Name);
+
+// Create routing profiles
+RoutingProfile
+    .Create("Sales-Agent")
+    .SetDescription("Sales agents only")
+    .SetDefaultOutboundQueue(salesQueue.QueueArn)
+    .AddMediaConcurrency(ChannelType.Voice, 1)
+    .AddQueue(salesQueue.QueueArn, ChannelType.Voice, priority: 1)
+    .Build(callCenter);
+
+RoutingProfile
+    .Create("Support-Agent")
+    .SetDescription("Support agents only")
+    .SetDefaultOutboundQueue(supportQueue.QueueArn)
+    .AddMediaConcurrency(ChannelType.Voice, 1)
+    .AddQueue(supportQueue.QueueArn, ChannelType.Voice, priority: 1)
+    .Build(callCenter);
+
+RoutingProfile
+    .Create("Multi-Skilled")
+    .SetDescription("Handles all queues")
+    .SetDefaultOutboundQueue(salesQueue.QueueArn)
+    .AddMediaConcurrency(ChannelType.Voice, 1)
+    .AddQueue(vipQueue.QueueArn, ChannelType.Voice, priority: 1)
+    .AddQueue(salesQueue.QueueArn, ChannelType.Voice, priority: 2)
+    .AddQueue(supportQueue.QueueArn, ChannelType.Voice, priority: 3)
+    .Build(callCenter);
+
+app.Synth();
+```
+
+### Benefits
+
+- Flexible agent assignment
+- Priority-based routing
+- Skills-based distribution
+- Efficient resource utilization
+
+---
+
+## Branching and Conditional Logic Pattern
+
+Use branching to create complex flows with multiple paths.
+
+### When to Use
+
+- IVR menus
+- Conditional routing based on customer input
+- Authentication flows with success/failure paths
+- Multi-level menus
+
+### Pattern
+
+```csharp
+Flow
+    .Create("ComplexMenu")
+    .SetType(FlowType.ContactFlow)
+    .PlayPrompt("Welcome to our service center.")
+
+    // First level menu
+    .GetCustomerInput("Press 1 for billing, 2 for technical support, 3 for sales.")
+
+    // Billing path
+    .OnDigit("1", billing => billing
+        .PlayPrompt("You selected billing.")
+        .GetCustomerInput("Press 1 to check your balance, 2 to make a payment.")
+        .OnDigit("1", balance => balance
+            .PlayPrompt("Checking your balance...")
+            .InvokeLambda(balanceLambda.FunctionArn, "check-balance")
+            .OnSuccess(s => s
+                .PlayPrompt($"Your balance is {Attributes.External("Balance")} dollars.")
+                .Disconnect())
+            .OnError(e => e
+                .PlayPrompt("Could not retrieve balance.")
+                .TransferToQueue("Billing")
+                .Disconnect())
+            .ThenContinue())
+        .OnDigit("2", payment => payment
+            .PlayPrompt("Transferring to payments...")
+            .TransferToQueue("Payments")
+            .Disconnect())
+        .OnDefault(d => d.Disconnect())
+        .OnTimeout(t => t.Disconnect()))
+
+    // Technical support path
+    .OnDigit("2", techSupport => techSupport
+        .PlayPrompt("Transferring to technical support.")
+        .TransferToQueue("TechSupport")
+        .Disconnect())
+
+    // Sales path
+    .OnDigit("3", sales => sales
+        .PlayPrompt("Transferring to sales.")
+        .TransferToQueue("Sales")
+        .Disconnect())
+
+    // Default and timeout
+    .OnDefault(defaultPath => defaultPath
+        .PlayPrompt("Invalid selection. Goodbye.")
+        .Disconnect())
+    .OnTimeout(timeout => timeout
+        .PlayPrompt("No input received. Goodbye.")
+        .Disconnect())
+    .OnError(error => error
+        .PlayPrompt("An error occurred. Goodbye.")
+        .Disconnect())
+
+    .Disconnect()
+    .Build(callCenter);
+```
+
+### Benefits
+
+- Complex IVR flows
+- Clear path visualization in code
+- Nested menus supported
+- Error handling at each level
+
+---
+
+## Contact Attributes Pattern
+
+Store and retrieve contact attributes throughout the flow.
+
+### When to Use
+
+- Storing customer data for agent screen pop
+- Passing data between flow steps
+- Personalizing messages
+- Tracking customer journey
+
+### Pattern
+
+```csharp
+Flow
+    .Create("AttributesExample")
+    .SetType(FlowType.ContactFlow)
+
+    // Set initial attributes
+    .SetContactAttributes(attrs =>
+    {
+        attrs["Source"] = "MainLine";
+        attrs["Priority"] = "Normal";
+    })
+
+    // Get input and store it
+    .StoreCustomerInput("Enter your account number", input =>
+    {
+        input.MaxDigits = 10;
+    })
+    .OnSuccess(success => success
+        // Store the input in an attribute
+        .SetContactAttributes(attrs =>
+        {
+            attrs["AccountNumber"] = Attributes.System(SystemAttributes.StoredCustomerInput);
+        })
+        // Call Lambda and use external attributes
+        .InvokeLambda(lookupLambda.FunctionArn, "lookup", lambda =>
+        {
+            lambda.InputParameters["Account"] = Attributes.Contact("AccountNumber");
+        })
+        .OnSuccess(found => found
+            // Store Lambda response
+            .SetContactAttributes(attrs =>
+            {
+                attrs["CustomerName"] = Attributes.External("CustomerName");
+                attrs["AccountType"] = Attributes.External("AccountType");
+                attrs["Balance"] = Attributes.External("Balance");
+            })
+            // Use attributes in prompts
+            .PlayPrompt($"Welcome {Attributes.Contact("CustomerName")}!")
+            .TransferToQueue("Support")
+            .Disconnect())
+        .OnError(notFound => notFound.Disconnect())
+        .ThenContinue())
+    .OnError(error => error.Disconnect())
+    .Disconnect()
+    .Build(callCenter);
+```
+
+### Attribute Types
+
+- **Contact Attributes**: `Attributes.Contact("AttributeName")` - User-defined attributes
+- **System Attributes**: `Attributes.System(SystemAttributes.StoredCustomerInput)` - System values
+- **External Attributes**: `Attributes.External("AttributeName")` - Lambda response values
+
+---
+
 ## Testing Patterns
 
 Write testable contact center code.
 
-### Unit Testing Flows
-
-```csharp
-[Test]
-public async Task SalesFlow_Should_Route_To_Correct_Queue()
-{
-    // Arrange
-    var mockBuilder = new Mock<IFlowBuilder>();
-    var flow = new SalesFlow(mockBuilder.Object);
-
-    // Act
-    var result = await flow.RouteCustomer(new CustomerContext
-    {
-        AccountType = "Premium"
-    });
-
-    // Assert
-    result.QueueName.Should().Be("PremiumSales");
-    result.Priority.Should().Be(1);
-}
-```
-
-### Integration Testing with CDK
+### Unit Testing CDK Constructs
 
 ```csharp
 [Test]
 public void Deploy_Should_Create_All_Resources()
 {
     // Arrange
-    var app = new App();
-    var stack = new ConnectStack(app, "TestStack");
+    var app = new SwitchboardApp();
+    var callCenter = app.CreateCallCenter("TestStack", "test-stack");
+
+    // Add resources
+    HoursOfOperation
+        .Create("Business Hours")
+        .WithTimeZone("America/New_York")
+        .WithStandardBusinessHours()
+        .Build(callCenter);
+
+    Queue
+        .Create("Sales")
+        .Build(callCenter, "Business Hours");
 
     // Act
-    var template = Template.FromStack(stack);
+    var template = Template.FromStack(callCenter);
 
     // Assert
-    template.ResourceCountIs("AWS::Connect::ContactFlow", 3);
+    template.ResourceCountIs("AWS::Connect::Queue", 1);
     template.HasResourceProperties("AWS::Connect::Queue", new Dictionary<string, object>
     {
         ["Name"] = "Sales"
@@ -490,54 +522,47 @@ public void Deploy_Should_Create_All_Resources()
 }
 ```
 
+### Benefits
+
+- Test infrastructure before deployment
+- Verify resource counts and properties
+- CI/CD integration
+- Catch configuration errors early
+
 ---
 
 ## Summary
 
-| Pattern               | Best For           | Code Style         | Learning Curve | Flexibility      |
-| --------------------- | ------------------ | ------------------ | -------------- | ---------------- |
-| **Attribute-Based**   | Declarative flows  | Minimal, generated | Easy           | Static structure |
-| **Fluent Builder**    | Programmatic flows | Explicit, verbose  | Moderate       | Full control     |
-| **Hybrid**            | Real-world apps    | Mixed              | Moderate       | Best of both     |
-| **Modular**           | Shared logic       | Reusable           | Easy           | High             |
-| **Multi-Environment** | Dev/Staging/Prod   | Config-driven      | Easy           | Medium           |
-| **Dynamic Config**    | Runtime changes    | DynamoDB-backed    | Moderate       | Very High        |
-| **Import Existing**   | Migration          | Incremental        | Moderate       | High             |
+| Pattern | Best For | Code Style | Complexity |
+|---------|----------|------------|------------|
+| **Fluent Builder** | All flows | Explicit, chainable | Low-Medium |
+| **Chained Config** | Quick setup | Concise, readable | Low |
+| **Existing Instance** | Migration | Incremental | Low |
+| **Lambda Integration** | Dynamic logic | Service integration | Medium |
+| **Multi-Queue** | Complex routing | Resource organization | Medium |
+| **Branching** | IVR menus | Nested callbacks | Medium-High |
+| **Attributes** | Data passing | Context management | Low |
+| **Testing** | Quality assurance | Unit tests | Medium |
 
 ### Pattern Selection Guide
 
-**Neither approach is "better" - choose based on your specific needs and preferences.**
+**For simple flows**: Use Fluent Builder with Chained Config
 
-**Choose Attribute-Based when:**
+**For complex IVR**: Use Fluent Builder with Branching Pattern
 
-- 📝 You prefer declarative code over imperative
-- ✨ You want minimal code and high readability
-- 🤖 You're comfortable with source generator "magic"
-- 🎯 Flow structure is mostly static
-- ✅ You want compile-time validation via analyzers
+**For customer data**: Combine Lambda Integration with Attributes Pattern
 
-**Choose Fluent Builder when:**
+**For existing setups**: Use Existing Instance Pattern
 
-- 🔀 You prefer explicit, programmatic control
-- ⚙️ Flow structure changes based on runtime conditions
-- 🧩 You're building flows from external config/databases
-- 💻 You want to see all code (no generated files)
-- 🧪 You prefer testing without generated dependencies
+**For quality**: Always include Testing Patterns
 
-**Choose Hybrid when:**
+---
 
-- 🏢 Building real-world production applications
-- 📊 You have both simple and complex flows
-- 💉 You want dependency injection throughout
-- ✅ You want the strengths of both approaches
-- 👥 Different team members prefer different styles
+## Future Patterns
 
-**Real-world usage patterns:**
+The following patterns are planned for future releases:
 
-- Most production apps use **all three** patterns depending on the scenario
-- Simple flows: Often attribute-based for clarity
-- Complex flows: Often fluent or hybrid for flexibility
-- Shared logic: Modular pattern regardless of approach
-- Configuration: Always use Multi-Environment + Dynamic Config
-
-**Remember:** You can switch between approaches at any time. Start with what feels natural, refactor later if needed. Both compile to the same underlying infrastructure.
+- **Attribute-Based Configuration** - Define flows declaratively with C# attributes
+- **Source Generator Pattern** - Auto-generate flow implementations from attributes
+- **Dynamic Runtime Configuration** - Update flow behavior via DynamoDB without redeployment
+- **Modular Flow Composition** - Break large flows into reusable modules
