@@ -1,5 +1,46 @@
 import { defineConfig } from 'vitepress'
 
+// Reusable architecture sidebar
+const architectureSidebar = [
+  {
+    text: 'Quick Reference',
+    items: [
+      { text: 'Quick Reference', link: '/QUICK-REFERENCE' },
+      { text: 'Attribute Quick Guide', link: '/ATTRIBUTE-REFERENCE-QUICK-GUIDE' }
+    ]
+  },
+  {
+    text: 'Architecture & Planning',
+    items: [
+      { text: 'Project Hub', link: '/00-PROJECT-HUB' },
+      { text: 'Architecture Patterns', link: '/02-ARCHITECTURE-PATTERNS' },
+      { text: 'Dynamic Configuration', link: '/03-DYNAMIC-CONFIGURATION' },
+      { text: 'Language & Performance', link: '/04-LANGUAGE-PERFORMANCE' },
+      { text: 'Project Setup', link: '/05-PROJECT-SETUP' },
+      { text: 'Framework Architecture', link: '/06-FRAMEWORK-ARCHITECTURE' },
+      { text: 'Advanced .NET Architecture', link: '/07-ADVANCED-DOTNET-ARCHITECTURE' },
+      { text: 'Production Examples', link: '/08-PRODUCTION-EXAMPLES' }
+    ]
+  },
+  {
+    text: 'Flow Design',
+    items: [
+      { text: 'Flow Blocks Reference', link: '/09-FLOW-BLOCKS-REFERENCE' },
+      { text: 'ASR & DTMF Design', link: '/ASR-DTMF-DESIGN' },
+      { text: 'Sequential Input Foundation', link: '/SEQUENTIAL-INPUT-FOUNDATION' },
+      { text: 'CheckContactAttribute Branching', link: '/CheckContactAttribute-Inline-Branching' },
+      { text: 'CheckContactAttribute Migration', link: '/CHECKCONTACTATTRIBUTE-MIGRATION' }
+    ]
+  },
+  {
+    text: 'Best Practices',
+    items: [
+      { text: 'Deployment Strategies', link: '/DEPLOYMENT-STRATEGIES' },
+      { text: 'Magic Strings Elimination', link: '/MAGIC-STRINGS-ELIMINATION' }
+    ]
+  }
+]
+
 export default defineConfig({
   title: 'Switchboard',
   description: 'Code-first contact center Framework for Amazon Connect',
@@ -16,7 +57,8 @@ export default defineConfig({
       { text: 'Building', link: '/building/flows' },
       { text: 'Reference', link: '/reference/stack' },
       { text: 'Examples', link: '/examples/minimal-setup' },
-      { text: 'GitHub', link: 'https://github.com/nicksoftware/AmazonConnectBuilderFramework' }
+      { text: 'Architecture', link: '/00-PROJECT-HUB' },
+      { text: 'GitHub', link: 'https://nicksoftware.github.io/switchboard-docs/' }
     ],
 
     sidebar: {
@@ -47,6 +89,7 @@ export default defineConfig({
             { text: 'Fluent API', link: '/guide/flows/fluent-builders' },
             { text: 'Customer Input Handling', link: '/guide/flows/input-handling' },
             { text: 'Speech Recognition (ASR)', link: '/guide/flows/speech-recognition' },
+            { text: 'Multi-Language Support', link: '/guide/flows/multi-language' },
             { text: 'Advanced Prompts', link: '/guide/flows/prompts' },
             { text: 'Dynamic Attributes', link: '/guide/flows/dynamic-attributes' },
             { text: 'Attribute-Based Flows', link: '/guide/flows/attribute-based' },
@@ -146,7 +189,26 @@ export default defineConfig({
             { text: 'Stack Extensions', link: '/reference/extensions/stack-extensions' }
           ]
         }
-      ]
+      ],
+
+      // Architecture & Design Documentation - map all architecture doc paths to same sidebar
+      '/00-PROJECT-HUB': architectureSidebar,
+      '/02-': architectureSidebar,
+      '/03-': architectureSidebar,
+      '/04-': architectureSidebar,
+      '/05-': architectureSidebar,
+      '/06-': architectureSidebar,
+      '/07-': architectureSidebar,
+      '/08-': architectureSidebar,
+      '/09-': architectureSidebar,
+      '/ASR-': architectureSidebar,
+      '/ATTRIBUTE-': architectureSidebar,
+      '/CHECKCONTACT': architectureSidebar,
+      '/CheckContact': architectureSidebar,
+      '/DEPLOYMENT-': architectureSidebar,
+      '/MAGIC-': architectureSidebar,
+      '/QUICK-': architectureSidebar,
+      '/SEQUENTIAL-': architectureSidebar
     },
 
     socialLinks: [

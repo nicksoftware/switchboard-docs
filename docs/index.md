@@ -40,6 +40,14 @@ features:
   - icon: 🚀
     title: Complete Resource Management
     details: Queues, flows, hours of operation, routing profiles, DynamoDB tables, and Lambda functions - all from code.
+
+  - icon: 🌍
+    title: Multi-Language Support
+    details: Build contact flows that serve customers in multiple languages with automatic voice selection and translation management.
+
+  - icon: 📚
+    title: Architecture Documentation
+    details: Deep-dive into design patterns, best practices, and advanced .NET architecture for enterprise deployments.
 ---
 
 ## Quick Example
@@ -144,3 +152,28 @@ If this resonates with you, **Switchboard is for you.**
 **Ready to stop wrestling with JSON and start writing code?**
 
 👉 [Get Started in 5 Minutes](/guide/quick-start)
+
+---
+
+## 📚 Documentation
+
+### Getting Started
+- [Introduction](/guide/introduction) - Learn the basics
+- [Quick Start](/guide/quick-start) - Build your first flow in 5 minutes
+- [Installation](/guide/installation) - Package setup and dependencies
+
+### Building Resources
+- [Contact Flows](/building/flows) - Create IVR menus and call routing
+- [Queues](/building/queues) - Configure agent queues
+- [Hours of Operation](/building/hours-of-operation) - Set business hours
+
+### Advanced Topics
+- [Multi-Language Support](/guide/flows/multi-language) - Build flows for multiple languages
+- [Speech Recognition (ASR)](/guide/flows/speech-recognition) - Conversational IVR with voice input
+- [Dynamic Attributes](/guide/flows/dynamic-attributes) - Runtime configuration
+
+### Architecture & Design
+- [Project Hub](/00-PROJECT-HUB) - Architecture overview and planning
+- [Design Patterns](/02-ARCHITECTURE-PATTERNS) - GOF patterns and system design
+- [Flow Blocks Reference](/09-FLOW-BLOCKS-REFERENCE) - Complete flow block documentation
+- [Quick Reference](/QUICK-REFERENCE) - Decision summary and cheat sheet
