@@ -158,21 +158,25 @@ If this resonates with you, **Switchboard is for you.**
 ## 📚 Documentation
 
 ### Getting Started
+
 - [Introduction](/guide/introduction) - Learn the basics
 - [Quick Start](/guide/quick-start) - Build your first flow in 5 minutes
 - [Installation](/guide/installation) - Package setup and dependencies
 
 ### Building Resources
+
 - [Contact Flows](/building/flows) - Create IVR menus and call routing
 - [Queues](/building/queues) - Configure agent queues
 - [Hours of Operation](/building/hours-of-operation) - Set business hours
 
 ### Advanced Topics
+
 - [Multi-Language Support](/guide/flows/multi-language) - Build flows for multiple languages
 - [Speech Recognition (ASR)](/guide/flows/speech-recognition) - Conversational IVR with voice input
 - [Dynamic Attributes](/guide/flows/dynamic-attributes) - Runtime configuration
 
 ### Architecture & Design
+
 - [Project Hub](/00-PROJECT-HUB) - Architecture overview and planning
 - [Design Patterns](/02-ARCHITECTURE-PATTERNS) - GOF patterns and system design
 - [Flow Blocks Reference](/09-FLOW-BLOCKS-REFERENCE) - Complete flow block documentation
