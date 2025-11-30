@@ -103,26 +103,17 @@ npm install -g aws-cdk
 
 ## Why I Built This
 
-### The Problem I Faced
+### The Problem
 
-I'm a software engineer, not a DevOps or cloud engineer. When I started working with Amazon Connect at my job, I struggled—**a lot**.
+Traditional Amazon Connect development is painful:
 
-**The reality of traditional Amazon Connect development:**
+- **Massive JSON templates** that are impossible to read or maintain
+- **Manual ARN replacement** every time you export/import a flow
+- **Zero validation** until deployment—errors only appear after pushing to AWS
+- **No meaningful version control**—diffing JSON files with generated IDs is useless
+- **Hidden bugs** that are hard to catch before they cause issues
 
-- **Massive JSON templates** for flows and queues that are impossible to read or understand
-- **Manual ARN replacement** every time you export/import a flow (copy, paste, find, replace... hope you didn't miss one)
-- **Zero validation** until deployment—you only discover errors after pushing to AWS
-- **No version control** that makes sense—diffing JSON files with generated IDs is useless
-- **No collaboration**—how do you review a 2,000-line JSON blob?
-- **Hidden bugs** that only surface in production when customers are calling
-
-**The gap between teams was huge.** Different organizations had their own patterns and frameworks involving complex JSON templates. Every time someone exported a flow, they'd manually replace ARNs in massive JSON objects. Errors were inevitable.
-
-### The Breaking Point
-
-After multiple times I deployed a flow with a typo in the JSON config, then having to modify it in the console because working with the JSON directly was nearly impossible, then having to update the JSON with dynamic values and accidentally missing a variable, I knew there had to be a better way.
-
-**I'm a developer. I wanted to write code.**
+**I'm a developer. I wanted to write code, not wrestle with JSON.**
 
 ### The Solution: Code-First Contact Centers
 

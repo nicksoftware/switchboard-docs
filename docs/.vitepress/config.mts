@@ -58,7 +58,7 @@ export default defineConfig({
       { text: 'Reference', link: '/reference/stack' },
       { text: 'Examples', link: '/examples/minimal-setup' },
       { text: 'Architecture', link: '/00-PROJECT-HUB' },
-      { text: 'GitHub', link: 'https://nicksoftware.github.io/switchboard-docs/' }
+      { text: 'GitHub', link: 'https://github.com/nicksoftware/switchboard-docs' }
     ],
 
     sidebar: {
@@ -212,7 +212,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/nicksoftware/AmazonConnectBuilderFramework' }
+      { icon: 'github', link: 'https://github.com/nicksoftware/switchboard-docs' }
     ],
 
     footer: {
@@ -225,7 +225,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/nicksoftware/AmazonConnectBuilderFramework/edit/main/docs/:path'
+      pattern: 'https://github.com/nicksoftware/switchboard-docs/edit/main/docs/:path'
     }
   }
 })
