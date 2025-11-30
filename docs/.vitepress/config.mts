@@ -14,11 +14,7 @@ const architectureSidebar = [
     items: [
       { text: 'Project Hub', link: '/00-PROJECT-HUB' },
       { text: 'Architecture Patterns', link: '/02-ARCHITECTURE-PATTERNS' },
-      { text: 'Dynamic Configuration', link: '/03-DYNAMIC-CONFIGURATION' },
       { text: 'Lambda Integration', link: '/04-LANGUAGE-PERFORMANCE' },
-      { text: 'Project Setup', link: '/05-PROJECT-SETUP' },
-      { text: 'Framework Architecture', link: '/06-FRAMEWORK-ARCHITECTURE' },
-      { text: 'Advanced .NET Architecture', link: '/07-ADVANCED-DOTNET-ARCHITECTURE' },
       { text: 'Production Examples', link: '/08-PRODUCTION-EXAMPLES' }
     ]
   },
