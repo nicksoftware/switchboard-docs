@@ -9,6 +9,7 @@ Build a complete contact center in one file using Switchboard's fluent CDK API.
 ## What You'll Build
 
 A fully functional contact center with:
+
 - ✅ 2 queues (Sales, Support)
 - ✅ IVR menu flow
 - ✅ Callback flow
@@ -205,6 +206,7 @@ cdk deploy
 ## What Gets Created
 
 ### Amazon Connect Resources
+
 - **Instance:** `QuickStartCenter`
 - **Queues:**
   - Sales Team (max 50 contacts)
@@ -214,6 +216,7 @@ cdk deploy
   - QueueCallback
 
 ### Supporting Infrastructure
+
 - **DynamoDB Table:** `switchboard-config` (for runtime updates)
 - **Lambda Function:** `CustomerAuth` (for authentication)
 - **IAM Roles:**
@@ -405,11 +408,13 @@ cdk destroy
 ## Next Steps
 
 This single-file approach is great for:
+
 - ✅ Prototypes and demos
 - ✅ Learning Switchboard
 - ✅ Simple contact centers (1-5 flows)
 
 **When to move to more advanced patterns:**
+
 - 📈 **10+ flows** → Use [attribute-based](/guide/patterns#attribute-based-flow-definition) or [modular](/guide/patterns#modular-flow-composition) patterns
 - 🧪 **Need testing** → Use [hybrid pattern](/guide/patterns#hybrid-pattern-attributes-fluent) with dependency injection
 - 👥 **Team collaboration** → Split into multiple files, see [enterprise examples](/examples/enterprise-attributes)
