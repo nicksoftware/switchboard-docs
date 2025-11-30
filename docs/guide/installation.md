@@ -1,7 +1,7 @@
 # Installation
 
 ::: warning PREVIEW RELEASE
-Switchboard is currently in **preview** (v0.1.0-preview.17). The installation process may change before the stable 1.0 release.
+Switchboard is currently in **preview** (v0.1.0-alpha.1). The installation process may change before the stable 1.0 release.
 :::
 
 ## Prerequisites
@@ -31,7 +31,142 @@ aws sts get-caller-identity
 # Should output your AWS account details
 ```
 
-## Installation Steps
+## Installation Methods
+
+Choose the method that best fits your needs:
+
+| Method                                                       | Best For                        |
+| ------------------------------------------------------------ | ------------------------------- |
+| [Project Templates](#option-1-project-templates-recommended) | New projects, fastest setup     |
+| [Manual Installation](#option-2-manual-installation)         | Existing projects, custom setup |
+
+---
+
+## Option 1: Project Templates (Recommended)
+
+The easiest way to get started is with our `dotnet new` templates:
+
+### Install Templates
+
+```bash
+dotnet new install NickSoftware.Switchboard.Templates
+```
+
+### Available Templates
+
+We provide two templates for different use cases:
+
+| Template                | Short Name            | Description                             |
+| ----------------------- | --------------------- | --------------------------------------- |
+| **Switchboard Minimal** | `switchboard-minimal` | Single-file setup, perfect for learning |
+| **Switchboard Starter** | `switchboard`         | Multi-file organization for production  |
+
+### Minimal Template
+
+Everything in one `Program.cs` - explicit, simple code:
+
+```bash
+dotnet new switchboard-minimal -n MyContactCenter
+```
+
+**Project structure:**
+
+```
+MyContactCenter/
+├── Program.cs           # All code here - flows, resources, stack
+├── GlobalUsings.cs      # Common using statements
+├── appsettings.json     # Configuration
+├── cdk.json             # CDK config
+└── MyContactCenter.csproj
+```
+
+### Starter Template
+
+Organized multi-file structure with assembly scanning:
+
+```bash
+dotnet new switchboard -n MyContactCenter
+```
+
+**Project structure:**
+
+```
+MyContactCenter/
+├── Program.cs
+├── Configuration/
+│   ├── Queues.cs           # Type-safe queue constants
+│   ├── FlowLabels.cs       # Flow label constants
+│   └── ResourceKeys.cs     # Resource key constants
+├── Resources/
+│   ├── HoursProvider.cs    # IHoursOfOperationProvider
+│   └── QueuesProvider.cs   # IQueueProvider
+├── Flows/
+│   └── MainMenuFlow.cs     # IDiscoverableFlowBuilder
+├── appsettings.json
+├── cdk.json
+└── MyContactCenter.csproj
+```
+
+### Template Parameters
+
+Both templates support these options:
+
+| Parameter          | CLI Flag                | Default               | Description                   |
+| ------------------ | ----------------------- | --------------------- | ----------------------------- |
+| Framework          | `-f`                    | `net10.0`             | Target .NET framework         |
+| InstanceAlias      | `--instance-alias`      | `my-connect-instance` | Amazon Connect instance alias |
+| Region             | `--region`              | `us-east-1`           | AWS region for deployment     |
+| SwitchboardVersion | `--switchboard-version` | `0.1.0-alpha.1`       | Switchboard package version   |
+
+### Usage Examples
+
+```bash
+# Create minimal project with defaults
+dotnet new switchboard-minimal -n MyProject
+
+# Create starter project with custom options
+dotnet new switchboard -n MyProject \
+  --instance-alias my-instance \
+  --region us-west-2 \
+  --framework net9.0
+
+# View all options for a template
+dotnet new switchboard-minimal --help
+dotnet new switchboard --help
+```
+
+### Manage Templates
+
+```bash
+# List installed Switchboard templates
+dotnet new list switchboard
+
+# Update templates to latest version
+dotnet new install NickSoftware.Switchboard.Templates
+
+# Uninstall templates
+dotnet new uninstall NickSoftware.Switchboard.Templates
+```
+
+### Deploy
+
+```bash
+cd MyContactCenter
+cdk bootstrap    # First time only
+cdk deploy
+```
+
+::: tip Which Template Should I Use?
+
+- **New to Switchboard?** Start with `switchboard-minimal` to learn the basics
+- **Building for production?** Use `switchboard` for organized, maintainable code
+  :::
+
+---
+
+## Option 2: Manual Installation
+
+Use this method if you have an existing project or want more control over setup.
 
 ### 1. Create Your Project
 

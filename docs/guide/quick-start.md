@@ -9,7 +9,101 @@ Get up and running with Switchboard in 5 minutes.
 - **AWS Account** with appropriate permissions
 - **AWS CLI** configured with credentials
 
-## Installation
+## Option 1: Using Project Templates (Recommended)
+
+The fastest way to get started is with our project templates:
+
+```bash
+# Install templates from NuGet
+dotnet new install NickSoftware.Switchboard.Templates
+
+# List available templates
+dotnet new list switchboard
+```
+
+### Choose Your Template
+
+We offer two templates to match your needs:
+
+| Template    | Command                          | Best For                                     |
+| ----------- | -------------------------------- | -------------------------------------------- |
+| **Minimal** | `dotnet new switchboard-minimal` | Learning, simple projects, single-file setup |
+| **Starter** | `dotnet new switchboard`         | Production projects, multi-file organization |
+
+### Minimal Template (Single File)
+
+Everything in one `Program.cs` - perfect for learning or simple projects:
+
+```bash
+# Create minimal project
+dotnet new switchboard-minimal -n MyContactCenter
+
+# Deploy
+cd MyContactCenter
+cdk bootstrap    # First time only
+cdk deploy
+```
+
+**What you get:**
+
+- Single `Program.cs` with direct flow/resource creation
+- No assembly scanning - explicit, simple code
+- Uses `ExistingConnectStack.FromArn()` helper
+- Minimal files: `Program.cs`, `GlobalUsings.cs`, `appsettings.json`, `cdk.json`
+
+### Starter Template (Multi-File)
+
+Organized project structure matching production patterns:
+
+```bash
+# Create full starter project
+dotnet new switchboard -n MyContactCenter
+
+# Deploy
+cd MyContactCenter
+cdk bootstrap    # First time only
+cdk deploy
+```
+
+**What you get:**
+
+- Organized folders: `Configuration/`, `Resources/`, `Flows/`
+- Assembly scanning pattern for auto-discovery
+- Type-safe constants (`Queues`, `FlowLabels`, `ResourceKeys`)
+- Resource providers implementing interfaces (`IHoursOfOperationProvider`, etc.)
+- Flow builders implementing `IDiscoverableFlowBuilder`
+
+### Template Options
+
+Both templates support these options:
+
+```bash
+# Create with custom settings
+dotnet new switchboard -n MyContactCenter \
+  --instance-alias my-instance \
+  --region us-west-2 \
+  --framework net9.0
+```
+
+| Parameter          | CLI Flag                | Default               | Description            |
+| ------------------ | ----------------------- | --------------------- | ---------------------- |
+| Framework          | `-f`                    | `net10.0`             | Target framework       |
+| InstanceAlias      | `--instance-alias`      | `my-connect-instance` | Connect instance alias |
+| Region             | `--region`              | `us-east-1`           | AWS region             |
+| SwitchboardVersion | `--switchboard-version` | `0.1.0-alpha.1`       | Package version        |
+
+::: tip View Template Help
+
+```bash
+dotnet new switchboard-minimal --help
+dotnet new switchboard --help
+```
+
+:::
+
+---
+
+## Option 2: Manual Installation
 
 ### 1. Create a New Project
 
