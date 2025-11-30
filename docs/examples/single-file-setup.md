@@ -29,9 +29,64 @@ A fully functional contact center with:
 
 ---
 
+## Project Setup
+
+Create a new directory and set up these files:
+
+### 1. Create `cdk.json`
+
+This file tells CDK how to run your app:
+
+```json
+{
+  "app": "dotnet run",
+  "watch": {
+    "include": ["**"],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "**/*.d.ts",
+      "**/*.js",
+      "node_modules",
+      "bin",
+      "obj"
+    ]
+  },
+  "context": {
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:stackRelativeExports": true
+  }
+}
+```
+
+### 2. Create `MyContactCenter.csproj`
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Amazon.CDK.Lib" Version="2.*" />
+    <PackageReference Include="NickSoftware.Switchboard" Version="0.1.0-preview.17" />
+  </ItemGroup>
+
+</Project>
+```
+
+### 3. Create `Program.cs`
+
+---
+
 ## Complete Example
 
-Create a single `Program.cs` file:
+Your `Program.cs` file:
 
 ```csharp
 using Amazon.CDK;
