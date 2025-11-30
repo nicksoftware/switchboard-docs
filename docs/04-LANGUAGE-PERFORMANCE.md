@@ -1,625 +1,569 @@
-# ⚡ Language & Performance Considerations
+# ⚡ Lambda Integration Guide
 
-## Should You Use C# for Lambda Functions?
+Switchboard makes it easy to integrate Lambda functions written in **any language** into your Amazon Connect contact center. Use JavaScript, Python, Go, C#, or any runtime that AWS Lambda supports.
 
-### TL;DR: **Yes, with caveats**
+## Overview
 
-C# is an excellent choice for this framework **IF**:
-- You optimize for cold starts
-- You use .NET 8 with Native AOT (when stable for your workloads)
-- You implement proper warmup strategies
-- You're comfortable with the AWS .NET ecosystem
+Lambda functions are essential for adding custom business logic to your contact flows:
 
-## Performance Comparison
+- Customer authentication and lookup
+- CRM integrations
+- Dynamic routing decisions
+- Data validation
+- Call disposition recording
 
-### Cold Start Performance
+## Adding Lambda Functions
 
-| Runtime | Cold Start (avg) | Warm Execution | Memory Overhead |
-|---------|------------------|----------------|-----------------|
-| **Node.js 20** | 200-400ms | 1-10ms | 128-256 MB |
-| **Python 3.12** | 300-500ms | 1-10ms | 128-256 MB |
-| **C# .NET 8** | 1000-2000ms | 5-20ms | 256-512 MB |
-| **C# Native AOT** | 300-500ms | 5-20ms | 128-256 MB |
-| **Rust** | 100-200ms | <1ms | 128 MB |
-| **Go** | 100-300ms | 1-5ms | 128-256 MB |
+### The ConnectLambda Builder
 
-### Detailed .NET Lambda Performance Analysis
-
-#### Traditional .NET Lambda
-```
-Cold Start Breakdown:
-- Runtime initialization: 500-800ms
-- Assembly loading: 300-500ms
-- JIT compilation: 200-400ms
-- Application code init: 100-200ms
-Total: 1100-1900ms
-```
-
-#### .NET Native AOT Lambda
-```
-Cold Start Breakdown:
-- Runtime initialization: 100-200ms
-- Binary loading: 100-150ms
-- Application code init: 100-150ms
-Total: 300-500ms
-```
-
-### When C# Performance is Acceptable
-
-**Scenarios where C# cold start doesn't matter:**
-1. **Triggered by Step Functions**: Cold start absorbed by workflow
-2. **Scheduled/Cron Jobs**: Cold start happens once, then container reuses
-3. **Low-frequency operations**: Configuration updates, nightly processing
-4. **Background processing**: Async operations where latency isn't critical
-5. **EventBridge/SQS triggers**: Processing can tolerate delays
-
-**Scenarios where C# cold start DOES matter:**
-1. **Synchronous API Gateway calls**: User-facing latency
-2. **Real-time contact flow Lambda invocations**: During active calls
-3. **High-frequency, short-duration functions**: Cold start dominates total time
-
-## Framework-Specific Performance Recommendations
-
-### For CDK Infrastructure Code
-**Language**: C# ✅
-**Rationale**: Cold starts don't matter; this runs on dev machines and CI/CD, not in AWS Lambda.
-
-### For Configuration Fetcher Lambda
-**Critical Path**: ❌ Called synchronously during contact flows
-
-**Recommended Approach**:
-1. **Option A** (Recommended): Use C# .NET 8 Native AOT
-2. **Option B**: Use Node.js/Python for this specific Lambda
-3. **Option C**: Implement aggressive warming + provisioned concurrency
-
-**Implementation Strategy for Option A**:
+Switchboard provides a `ConnectLambda` builder to easily add Lambda functions to your contact center:
 
 ```csharp
-// ConfigFetcherFunction.csproj
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
-    <PublishAot>true</PublishAot>
-    <StripSymbols>true</StripSymbols>
-    <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
-    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
-  </PropertyGroup>
+var customerLookup = ConnectLambda
+    .Create("customer-lookup")
+    .WithId("CustomerLookupLambda")
+    .WithCode("./lambdas/customer-lookup")
+    .WithHandler("index.handler")           // Depends on your language
+    .WithMemory(512)
+    .WithTimeout(30)
+    .AssociateWithConnect(stack.InstanceId)
+    .Build(stack);
+```
 
-  <ItemGroup>
-    <PackageReference Include="Amazon.Lambda.Core" Version="2.2.0" />
-    <PackageReference Include="Amazon.Lambda.RuntimeSupport" Version="1.10.0" />
-    <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.0" />
-    <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.300" />
-  </ItemGroup>
-</Project>
+### Full API Reference
 
-// Program.cs - Bootstrap for Native AOT
+```csharp
+var lambda = ConnectLambda
+    .Create("function-name")                          // Required: Function name
+    .WithId("LogicalId")                              // CDK construct ID
+
+    // Code location (choose one)
+    .WithCode("./path/to/code")                       // Local directory
+    .WithS3Code("bucket", "key")                      // S3 bucket
+    .WithDockerImage("image-uri")                     // Container image
+
+    // Handler (format depends on language)
+    .WithHandler("index.handler")                     // Node.js
+    .WithHandler("lambda_function.handler")           // Python
+    .WithDotNetHandler("Assembly", "Namespace.Class", "Method") // .NET
+
+    // Configuration
+    .WithMemory(512)                                  // MB (128-10240)
+    .WithTimeout(30)                                  // Seconds (1-900)
+    .WithEnvironment("KEY", "value")                  // Environment variables
+    .WithRuntime(Runtime.NODEJS_20_X)                 // Override runtime detection
+
+    // DynamoDB integration
+    .WithTableRead(table, "TABLE_NAME_ENV_VAR")       // Read permissions
+    .WithTableWrite(table, "TABLE_NAME_ENV_VAR")     // Write permissions
+    .WithTableReadWrite(table, "TABLE_NAME_ENV_VAR") // Full permissions
+
+    // Connect integration
+    .AssociateWithConnect(instanceId)                 // Required for Connect
+    .ExportArn()                                      // Export ARN as CloudFormation output
+
+    .Build(stack);
+```
+
+## Language Examples
+
+### JavaScript / Node.js
+
+**Project structure:**
+
+```
+lambdas/
+  customer-lookup/
+    index.js
+    package.json
+```
+
+**index.js:**
+
+```javascript
+exports.handler = async (event) => {
+  console.log("Event:", JSON.stringify(event, null, 2));
+
+  const phoneNumber = event.Details.ContactData.CustomerEndpoint.Address;
+
+  // Your business logic here
+  const customer = await lookupCustomer(phoneNumber);
+
+  return {
+    CustomerName: customer.name,
+    AccountNumber: customer.accountNumber,
+    IsVIP: customer.isVip ? "true" : "false",
+  };
+};
+
+async function lookupCustomer(phoneNumber) {
+  // Implement your lookup logic
+  // Could query DynamoDB, call an API, etc.
+  return {
+    name: "John Doe",
+    accountNumber: "12345",
+    isVip: true,
+  };
+}
+```
+
+**Adding to Switchboard:**
+
+```csharp
+var customerLookup = ConnectLambda
+    .Create("customer-lookup")
+    .WithCode("./lambdas/customer-lookup")
+    .WithHandler("index.handler")
+    .WithRuntime(Runtime.NODEJS_20_X)
+    .WithMemory(256)
+    .WithTimeout(10)
+    .AssociateWithConnect(stack.InstanceId)
+    .Build(stack);
+```
+
+### Python
+
+**Project structure:**
+
+```
+lambdas/
+  customer-lookup/
+    lambda_function.py
+    requirements.txt
+```
+
+**lambda_function.py:**
+
+```python
+import json
+import boto3
+
+dynamodb = boto3.resource('dynamodb')
+
+def handler(event, context):
+    print(f"Event: {json.dumps(event)}")
+
+    phone_number = event['Details']['ContactData']['CustomerEndpoint']['Address']
+
+    # Your business logic here
+    customer = lookup_customer(phone_number)
+
+    return {
+        'CustomerName': customer['name'],
+        'AccountNumber': customer['account_number'],
+        'IsVIP': 'true' if customer['is_vip'] else 'false'
+    }
+
+def lookup_customer(phone_number):
+    # Implement your lookup logic
+    table = dynamodb.Table('Customers')
+    response = table.get_item(Key={'PhoneNumber': phone_number})
+    return response.get('Item', {
+        'name': 'Unknown',
+        'account_number': '',
+        'is_vip': False
+    })
+```
+
+**Adding to Switchboard:**
+
+```csharp
+var customerLookup = ConnectLambda
+    .Create("customer-lookup")
+    .WithCode("./lambdas/customer-lookup")
+    .WithHandler("lambda_function.handler")
+    .WithRuntime(Runtime.PYTHON_3_12)
+    .WithMemory(256)
+    .WithTimeout(10)
+    .WithTableRead(customersTable, "CUSTOMERS_TABLE")
+    .AssociateWithConnect(stack.InstanceId)
+    .Build(stack);
+```
+
+### TypeScript
+
+**Project structure:**
+
+```
+lambdas/
+  customer-lookup/
+    src/
+      index.ts
+    package.json
+    tsconfig.json
+```
+
+**src/index.ts:**
+
+```typescript
+import { ConnectContactFlowEvent, ConnectContactFlowResult } from "aws-lambda";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+
+const client = new DynamoDBClient({});
+const docClient = DynamoDBDocumentClient.from(client);
+
+interface Customer {
+  name: string;
+  accountNumber: string;
+  isVip: boolean;
+}
+
+export const handler = async (
+  event: ConnectContactFlowEvent
+): Promise<ConnectContactFlowResult> => {
+  console.log("Event:", JSON.stringify(event, null, 2));
+
+  const phoneNumber = event.Details.ContactData.CustomerEndpoint.Address;
+  const customer = await lookupCustomer(phoneNumber);
+
+  return {
+    CustomerName: customer.name,
+    AccountNumber: customer.accountNumber,
+    IsVIP: customer.isVip ? "true" : "false",
+  };
+};
+
+async function lookupCustomer(phoneNumber: string): Promise<Customer> {
+  const command = new GetCommand({
+    TableName: process.env.CUSTOMERS_TABLE,
+    Key: { PhoneNumber: phoneNumber },
+  });
+
+  const response = await docClient.send(command);
+
+  return (
+    (response.Item as Customer) ?? {
+      name: "Unknown",
+      accountNumber: "",
+      isVip: false,
+    }
+  );
+}
+```
+
+**Adding to Switchboard:**
+
+```csharp
+// After compiling TypeScript to JavaScript
+var customerLookup = ConnectLambda
+    .Create("customer-lookup")
+    .WithCode("./lambdas/customer-lookup/dist")  // Compiled output
+    .WithHandler("index.handler")
+    .WithRuntime(Runtime.NODEJS_20_X)
+    .WithMemory(256)
+    .WithTimeout(10)
+    .WithTableRead(customersTable, "CUSTOMERS_TABLE")
+    .AssociateWithConnect(stack.InstanceId)
+    .Build(stack);
+```
+
+### C# / .NET
+
+**Project structure:**
+
+```
+lambdas/
+  CustomerLookup/
+    Function.cs
+    CustomerLookup.csproj
+```
+
+**Function.cs:**
+
+```csharp
 using Amazon.Lambda.Core;
-using Amazon.Lambda.RuntimeSupport;
-using Amazon.Lambda.Serialization.SystemTextJson;
-
-namespace ConfigFetcher;
-
-public class Program
-{
-    private static async Task Main()
-    {
-        var function = new Function();
-        var serializer = new DefaultLambdaJsonSerializer();
-        
-        using var handlerWrapper = HandlerWrapper.GetHandlerWrapper<ConfigRequest, ConfigResponse>(
-            function.FunctionHandler, 
-            serializer);
-        
-        using var bootstrap = new LambdaBootstrap(handlerWrapper);
-        await bootstrap.RunAsync();
-    }
-}
-
-// Function.cs - Optimized for Native AOT
-public class Function
-{
-    private static readonly AmazonDynamoDBClient _dynamoClient = new();
-    private static readonly DynamoDBContext _context = new(_dynamoClient);
-
-    // Source generator for Native AOT compatibility
-    [LambdaSerializer(typeof(SourceGeneratorLambdaJsonSerializer<LambdaFunctionJsonSerializerContext>))]
-    public async Task<ConfigResponse> FunctionHandler(ConfigRequest request, ILambdaContext context)
-    {
-        try
-        {
-            // Implementation
-            var config = await GetConfiguration(request.FlowId);
-            
-            return new ConfigResponse
-            {
-                Success = true,
-                Configuration = config
-            };
-        }
-        catch (Exception ex)
-        {
-            context.Logger.LogError($"Error: {ex.Message}");
-            return new ConfigResponse
-            {
-                Success = false,
-                ErrorMessage = ex.Message
-            };
-        }
-    }
-
-    private static async Task<FlowConfiguration> GetConfiguration(string flowId)
-    {
-        var queryConfig = new DynamoDBOperationConfig
-        {
-            ConsistentRead = false // Eventually consistent is faster
-        };
-
-        var results = await _context.QueryAsync<FlowConfiguration>(flowId, queryConfig)
-            .GetRemainingAsync();
-
-        return results.FirstOrDefault(r => r.Active);
-    }
-}
-
-// JSON source generation for Native AOT
-[JsonSerializable(typeof(ConfigRequest))]
-[JsonSerializable(typeof(ConfigResponse))]
-[JsonSerializable(typeof(FlowConfiguration))]
-internal partial class LambdaFunctionJsonSerializerContext : JsonSerializerContext
-{
-}
-```
-
-**Deployment**:
-```bash
-# Publish Native AOT binary
-dotnet publish -c Release -r linux-x64
-
-# Package size comparison
-Traditional .NET Lambda: 25-40 MB
-Native AOT Lambda: 15-20 MB (smaller = faster cold start)
-```
-
-### For Business Logic Lambdas
-**Critical Path**: ⚠️ May be called during flows, depends on complexity
-
-**Decision Matrix**:
-
-| Characteristic | Use C# | Consider Alternative |
-|---------------|--------|---------------------|
-| Complex business logic | ✅ | - |
-| Heavy data processing | ✅ | - |
-| Existing C# codebase | ✅ | - |
-| <100ms execution time | ❌ | Python/Node.js |
-| High call frequency | ❌ | Native AOT or alt |
-| CPU-intensive | ✅ (faster execution) | Rust (even faster) |
-| I/O intensive | ⚠️ (fine with async) | Node.js (event loop) |
-
-### For Background Processing
-**Language**: C# ✅
-**Rationale**: Cold starts don't matter for async processing, queues, EventBridge triggers.
-
-## Cold Start Mitigation Strategies
-
-### 1. Provisioned Concurrency
-
-```csharp
-public class ConfigFetcherStack : Stack
-{
-    public ConfigFetcherStack(Construct scope, string id) : base(scope, id)
-    {
-        var configFetcher = new Function(this, "ConfigFetcher", new FunctionProps
-        {
-            Runtime = Runtime.DOTNET_8,
-            Handler = "ConfigFetcher::ConfigFetcher.Function::FunctionHandler",
-            Code = Code.FromAsset("./lambda/ConfigFetcher/bin/Release/net8.0/publish"),
-            Timeout = Duration.Seconds(10),
-            MemorySize = 512
-        });
-
-        // Provisioned concurrency - always keep 2 warm containers
-        var version = configFetcher.CurrentVersion;
-        
-        var alias = new Alias(this, "ProdAlias", new AliasProps
-        {
-            AliasName = "prod",
-            Version = version
-        });
-
-        alias.AddAutoScaling(new AutoScalingOptions
-        {
-            MinCapacity = 2, // Always 2 warm
-            MaxCapacity = 10 // Scale up to 10
-        }).ScaleOnUtilization(new UtilizationScalingOptions
-        {
-            UtilizationTarget = 0.7
-        });
-
-        // Cost: ~$0.015/hour per provisioned instance
-        // For 2 instances: ~$21.60/month
-    }
-}
-```
-
-### 2. Scheduled Warming
-
-```csharp
-// Lambda warmer function
-public class WarmerFunction
-{
-    private static readonly HttpClient _httpClient = new();
-    private static readonly string[] _functionNames = new[]
-    {
-        "config-fetcher",
-        "customer-lookup",
-        "disposition-handler"
-    };
-
-    public async Task FunctionHandler(ScheduledEvent evnt, ILambdaContext context)
-    {
-        var lambdaClient = new AmazonLambdaClient();
-        
-        var tasks = _functionNames.Select(async functionName =>
-        {
-            try
-            {
-                await lambdaClient.InvokeAsync(new InvokeRequest
-                {
-                    FunctionName = functionName,
-                    InvocationType = InvocationType.RequestResponse,
-                    Payload = "{\"warmup\": true}"
-                });
-                
-                context.Logger.LogInformation($"Warmed up {functionName}");
-            }
-            catch (Exception ex)
-            {
-                context.Logger.LogError($"Failed to warm {functionName}: {ex.Message}");
-            }
-        });
-
-        await Task.WhenAll(tasks);
-    }
-}
-
-// CDK rule to invoke every 5 minutes
-new Rule(this, "WarmupRule", new RuleProps
-{
-    Schedule = Schedule.Rate(Duration.Minutes(5)),
-    Targets = new[] { new LambdaFunction(warmerFunction) }
-});
-```
-
-### 3. Lazy Initialization Pattern
-
-```csharp
-public class OptimizedFunction
-{
-    // Static fields initialized once per container
-    private static readonly Lazy<AmazonDynamoDBClient> _dynamoClient = 
-        new Lazy<AmazonDynamoDBClient>(() => new AmazonDynamoDBClient());
-    
-    private static readonly Lazy<DynamoDBContext> _context = 
-        new Lazy<DynamoDBContext>(() => new DynamoDBContext(_dynamoClient.Value));
-    
-    private static readonly Lazy<IConnectionMultiplexer> _redis = 
-        new Lazy<IConnectionMultiplexer>(() => 
-            ConnectionMultiplexer.Connect(Environment.GetEnvironmentVariable("REDIS_ENDPOINT")));
-
-    public async Task<ConfigResponse> FunctionHandler(ConfigRequest request, ILambdaContext context)
-    {
-        // Check for warmup request
-        if (request.Warmup)
-        {
-            return new ConfigResponse { Success = true };
-        }
-
-        // Clients only initialized on first real request
-        var config = await _context.Value.LoadAsync<FlowConfiguration>(request.FlowId);
-        
-        return new ConfigResponse
-        {
-            Success = true,
-            Configuration = config
-        };
-    }
-}
-```
-
-### 4. SnapStart (AWS Lambda SnapStart for .NET - Preview)
-
-AWS SnapStart creates snapshots of initialized Lambda execution environments to dramatically reduce cold start times.
-
-**Status**: Available for Java, coming for .NET
-
-**Expected Performance**:
-- Traditional .NET: 1000-2000ms cold start
-- With SnapStart: 200-400ms cold start
-
-**When available, enable in CDK**:
-```csharp
-var function = new Function(this, "ConfigFetcher", new FunctionProps
-{
-    Runtime = Runtime.DOTNET_8,
-    Handler = "ConfigFetcher::ConfigFetcher.Function::FunctionHandler",
-    Code = Code.FromAsset("./lambda/ConfigFetcher/bin/Release/net8.0/publish"),
-    SnapStart = SnapStartConf.ON_PUBLISHED_VERSIONS
-});
-```
-
-## Benchmark Results
-
-### Test Setup
-- **Scenario**: Fetch configuration from DynamoDB with Redis cache miss
-- **Lambda Config**: 512 MB memory, us-east-1
-- **DynamoDB**: On-demand pricing, same region
-- **Test Method**: 100 invocations, 50% cold, 50% warm
-
-### Results
-
-#### Node.js 20
-```
-Cold Start Average: 287ms
-Warm Execution Average: 12ms
-P50: 15ms
-P95: 45ms
-P99: 120ms
-```
-
-#### Python 3.12
-```
-Cold Start Average: 412ms
-Warm Execution Average: 18ms
-P50: 22ms
-P95: 68ms
-P99: 180ms
-```
-
-#### C# .NET 8 (Traditional)
-```
-Cold Start Average: 1,543ms
-Warm Execution Average: 24ms
-P50: 32ms
-P95: 1,650ms (cold starts)
-P99: 1,875ms (cold starts)
-```
-
-#### C# .NET 8 (Native AOT)
-```
-Cold Start Average: 398ms
-Warm Execution Average: 21ms
-P50: 28ms
-P95: 125ms
-P99: 450ms
-```
-
-#### C# with Provisioned Concurrency
-```
-Cold Start Average: 0ms (always warm)
-Warm Execution Average: 24ms
-P50: 28ms
-P95: 45ms
-P99: 78ms
-```
-
-### Cost Analysis
-
-**Scenario**: Config fetcher Lambda invoked 1M times/month
-
-| Configuration | Cost | Performance |
-|---------------|------|-------------|
-| Node.js 20 | $3.20 | Fast |
-| Python 3.12 | $3.20 | Fast |
-| C# Traditional | $4.50 | Slow cold starts |
-| C# Native AOT | $3.20 | Fast |
-| C# + Prov. Concurrency (2) | $24.80 | Very fast |
-
-## Recommendation for This Framework
-
-### Framework Architecture Decision
-
-**CDK Infrastructure Code**: C# ✅
-- No performance concerns
-- Consistent language across project
-- Strong typing benefits
-- Rich CDK library
-
-**Configuration Fetcher Lambda**: C# Native AOT ✅
-- Critical path for contact flows
-- Native AOT brings performance on par with Node.js/Python
-- Maintains language consistency
-- Start with Native AOT, add provisioned concurrency if needed
-
-**Business Logic Lambdas**: C# ✅
-- Complex logic benefits from strong typing
-- Not always in critical path
-- Can use traditional .NET if Native AOT incompatible
-- Consider provisioned concurrency for high-traffic
-
-**Simple/High-Frequency Lambdas**: Consider Alternatives ⚠️
-- If Native AOT not viable and provisioned concurrency too expensive
-- Node.js/Python for simple transformations
-- But: Adds language complexity to project
-
-### Migration Path
-
-**Phase 1** (MVP): C# Traditional + Provisioned Concurrency
-- Fastest to implement
-- Proven technology
-- Performance acceptable with provisioning
-
-**Phase 2** (Optimization): Migrate to Native AOT
-- Reduce costs by removing provisioned concurrency
-- Improve cold start performance
-- Smaller deployment packages
-
-**Phase 3** (If Needed): Selective Language Mix
-- Keep C# for CDK and complex logic
-- Use Node.js/Python only for specific high-frequency, simple Lambdas
-- Document clearly when and why
-
-## Code Example: Performance-Optimized Lambda
-
-```csharp
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Amazon.Lambda.Core;
-using Amazon.Lambda.RuntimeSupport;
-using Amazon.Lambda.Serialization.SystemTextJson;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 
-// AOT-compatible JSON context
-[JsonSerializable(typeof(ConfigRequest))]
-[JsonSerializable(typeof(ConfigResponse))]
-[JsonSerializable(typeof(FlowConfiguration))]
-[JsonSourceGenerationOptions(
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    WriteIndented = false)]
-internal partial class JsonContext : JsonSerializerContext { }
+[assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
-namespace ConfigFetcher;
+namespace CustomerLookup;
 
-public class Program
+public class Function
 {
-    // Static initialization - happens once per container
-    private static readonly AmazonDynamoDBClient DynamoClient = new(
-        new AmazonDynamoDBConfig
-        {
-            MaxErrorRetry = 3,
-            Timeout = TimeSpan.FromSeconds(5)
-        });
+    private readonly IDynamoDBContext _context;
 
-    private static readonly DynamoDBContext Context = new(DynamoClient);
-
-    public static async Task Main()
+    public Function()
     {
-        var serializer = new SourceGeneratorLambdaJsonSerializer<JsonContext>();
-        
-        using var handlerWrapper = HandlerWrapper.GetHandlerWrapper(
-            (Func<ConfigRequest, ILambdaContext, Task<ConfigResponse>>)FunctionHandler,
-            serializer);
-
-        using var bootstrap = new LambdaBootstrap(handlerWrapper);
-        await bootstrap.RunAsync();
+        var client = new AmazonDynamoDBClient();
+        _context = new DynamoDBContext(client);
     }
 
-    public static async Task<ConfigResponse> FunctionHandler(
-        ConfigRequest request, 
+    public async Task<Dictionary<string, string>> FunctionHandler(
+        ConnectEvent input,
         ILambdaContext context)
     {
-        // Early return for warmup
-        if (request.Warmup)
+        var phoneNumber = input.Details.ContactData.CustomerEndpoint.Address;
+
+        var customer = await _context.LoadAsync<Customer>(phoneNumber);
+
+        return new Dictionary<string, string>
         {
-            context.Logger.LogInformation("Warmup request received");
-            return new ConfigResponse { Success = true };
-        }
-
-        try
-        {
-            var startTime = DateTime.UtcNow;
-
-            // Fetch configuration
-            var config = await GetConfigurationAsync(request.FlowId);
-
-            if (config == null || !config.Active)
-            {
-                return new ConfigResponse
-                {
-                    Success = false,
-                    ErrorMessage = "Configuration not found or inactive"
-                };
-            }
-
-            var elapsed = DateTime.UtcNow - startTime;
-            context.Logger.LogInformation($"Config fetched in {elapsed.TotalMilliseconds}ms");
-
-            return new ConfigResponse
-            {
-                Success = true,
-                Configuration = config,
-                ExecutionTimeMs = elapsed.TotalMilliseconds
-            };
-        }
-        catch (Exception ex)
-        {
-            context.Logger.LogError($"Error: {ex.Message}");
-            return new ConfigResponse
-            {
-                Success = false,
-                ErrorMessage = ex.Message
-            };
-        }
-    }
-
-    private static async Task<FlowConfiguration?> GetConfigurationAsync(string flowId)
-    {
-        var queryConfig = new DynamoDBOperationConfig
-        {
-            ConsistentRead = false, // Eventually consistent is faster
-            OverrideTableName = Environment.GetEnvironmentVariable("CONFIG_TABLE_NAME")
+            ["CustomerName"] = customer?.Name ?? "Unknown",
+            ["AccountNumber"] = customer?.AccountNumber ?? "",
+            ["IsVIP"] = customer?.IsVip == true ? "true" : "false"
         };
-
-        var results = await Context
-            .QueryAsync<FlowConfiguration>(flowId, queryConfig)
-            .GetRemainingAsync();
-
-        return results
-            .Where(r => r.Active)
-            .OrderByDescending(r => r.Version)
-            .FirstOrDefault();
     }
 }
 
-// Data models
-public class ConfigRequest
+public class ConnectEvent
 {
-    public string FlowId { get; set; } = string.Empty;
-    public bool Warmup { get; set; }
+    public Details Details { get; set; }
 }
 
-public class ConfigResponse
+public class Details
 {
-    public bool Success { get; set; }
-    public FlowConfiguration? Configuration { get; set; }
-    public string? ErrorMessage { get; set; }
-    public double ExecutionTimeMs { get; set; }
+    public ContactData ContactData { get; set; }
 }
 
-[DynamoDBTable("ConnectFlowConfigurations")]
-public class FlowConfiguration
+public class ContactData
+{
+    public Endpoint CustomerEndpoint { get; set; }
+}
+
+public class Endpoint
+{
+    public string Address { get; set; }
+}
+
+[DynamoDBTable("Customers")]
+public class Customer
 {
     [DynamoDBHashKey]
-    public string FlowId { get; set; } = string.Empty;
-
-    [DynamoDBRangeKey]
-    public int Version { get; set; }
-
-    public string FlowName { get; set; } = string.Empty;
-    public bool Active { get; set; }
-    public Dictionary<string, object> Parameters { get; set; } = new();
+    public string PhoneNumber { get; set; }
+    public string Name { get; set; }
+    public string AccountNumber { get; set; }
+    public bool IsVip { get; set; }
 }
 ```
 
-## Final Recommendation
+**Adding to Switchboard:**
 
-**Use C# throughout the framework with Native AOT for Lambdas.**
+```csharp
+var customerLookup = ConnectLambda
+    .Create("customer-lookup")
+    .WithCode("./lambdas/CustomerLookup/bin/Release/net8.0/publish")
+    .WithDotNetHandler("CustomerLookup", "CustomerLookup.Function", "FunctionHandler")
+    .WithMemory(512)
+    .WithTimeout(30)
+    .WithTableRead(customersTable, "CUSTOMERS_TABLE")
+    .AssociateWithConnect(stack.InstanceId)
+    .Build(stack);
+```
 
-**Advantages**:
-- ✅ Single language reduces cognitive load
-- ✅ Shared code between CDK and Lambdas
-- ✅ Strong typing prevents errors
-- ✅ Native AOT performance matches Node.js/Python
-- ✅ Rich AWS SDK for .NET
-- ✅ Excellent tooling (Visual Studio, Rider)
+## Using Lambda in Flows
 
-**When to reconsider**:
-- ❌ Native AOT doesn't support your dependencies
-- ❌ Team lacks C# expertise
-- ❌ Provisioned concurrency budget unavailable
-- ❌ Need <100ms P99 latency without provisioned concurrency
+Once you've added a Lambda function, use it in your flows:
 
-**Monitoring**: Track Lambda performance metrics and iterate based on real-world data.
+### Fluent API
+
+```csharp
+Flow.Create("CustomerServiceFlow")
+    .PlayPrompt("Please hold while we look up your account.")
+    .InvokeLambda(customerLookup, invoke => {
+        invoke.Timeout = TimeSpan.FromSeconds(8);
+        invoke.OnSuccess(success => success
+            .SetAttribute("CustomerName", "$.External.CustomerName")
+            .PlayPrompt(p => p.Dynamic("Welcome back, $.Attributes.CustomerName"))
+            .TransferToQueue("VIPQueue")
+        );
+        invoke.OnError(error => error
+            .PlayPrompt("We couldn't find your account.")
+            .TransferToQueue("GeneralQueue")
+        );
+    })
+    .Build(stack);
+```
+
+### Attribute-Based
+
+```csharp
+[ContactFlow("CustomerServiceFlow")]
+public partial class CustomerServiceFlow : FlowDefinitionBase
+{
+    [PlayPrompt("Please hold while we look up your account.")]
+    public partial void LookupMessage();
+
+    [InvokeLambda("CustomerLookupLambda")]
+    [OnSuccess(nameof(WelcomeBack))]
+    [OnError(nameof(AccountNotFound))]
+    public partial void LookupCustomer();
+
+    [PlayPrompt("Welcome back, $.Attributes.CustomerName")]
+    [TransferToQueue("VIPQueue")]
+    public partial void WelcomeBack();
+
+    [PlayPrompt("We couldn't find your account.")]
+    [TransferToQueue("GeneralQueue")]
+    public partial void AccountNotFound();
+}
+```
+
+## Performance Considerations
+
+### Cold Start Times by Language
+
+| Runtime           | Cold Start  | Warm Execution | Best For                  |
+| ----------------- | ----------- | -------------- | ------------------------- |
+| **Node.js 20**    | 200-400ms   | 1-10ms         | Most use cases, I/O heavy |
+| **Python 3.12**   | 300-500ms   | 1-10ms         | Data processing, ML       |
+| **Go**            | 100-300ms   | 1-5ms          | High performance needs    |
+| **C# .NET 8**     | 1000-2000ms | 5-20ms         | Complex business logic    |
+| **C# Native AOT** | 300-500ms   | 5-20ms         | .NET with fast starts     |
+
+### Recommendations
+
+**For most contact center Lambda functions:**
+
+- **Node.js** or **Python** are excellent choices
+- Fast cold starts
+- Large ecosystems for integrations
+- Easy to write and maintain
+
+**When to consider C#/.NET:**
+
+- Your team primarily uses C#
+- Complex business logic that benefits from strong typing
+- Sharing models with your CDK code
+- Use Native AOT to improve cold starts
+
+**When to consider Go:**
+
+- Need the fastest possible cold starts
+- High-throughput scenarios
+- Team has Go expertise
+
+### Reducing Cold Starts
+
+1. **Keep functions small** - Single responsibility
+2. **Minimize dependencies** - Smaller packages = faster loads
+3. **Use Provisioned Concurrency** - For critical path functions
+4. **Warm functions** - Schedule periodic invocations
+
+```csharp
+// Enable Provisioned Concurrency for critical Lambda
+var customerLookup = ConnectLambda
+    .Create("customer-lookup")
+    .WithCode("./lambdas/customer-lookup")
+    .WithHandler("index.handler")
+    .WithProvisionedConcurrency(2)  // Always keep 2 warm instances
+    .AssociateWithConnect(stack.InstanceId)
+    .Build(stack);
+```
+
+## Return Value Format
+
+All Lambda functions invoked from Connect must return a flat dictionary of string key-value pairs:
+
+```javascript
+// ✅ Correct - Flat structure with string values
+return {
+  CustomerName: "John Doe",
+  AccountNumber: "12345",
+  IsVIP: "true", // Note: Boolean as string
+};
+
+// ❌ Incorrect - Nested objects
+return {
+  customer: {
+    name: "John Doe",
+  },
+};
+
+// ❌ Incorrect - Non-string values
+return {
+  CustomerName: "John Doe",
+  IsVIP: true, // Should be "true" as string
+};
+```
+
+## Input Event Structure
+
+Lambda functions receive this structure from Connect:
+
+```json
+{
+  "Details": {
+    "ContactData": {
+      "Attributes": {
+        "ExistingAttribute": "value"
+      },
+      "Channel": "VOICE",
+      "ContactId": "abc123",
+      "CustomerEndpoint": {
+        "Address": "+15551234567",
+        "Type": "TELEPHONE_NUMBER"
+      },
+      "InitialContactId": "abc123",
+      "InstanceARN": "arn:aws:connect:...",
+      "MediaStreams": {
+        "Customer": {
+          "Audio": null
+        }
+      },
+      "Queue": null,
+      "SystemEndpoint": {
+        "Address": "+18001234567",
+        "Type": "TELEPHONE_NUMBER"
+      }
+    },
+    "Parameters": {
+      "ParameterFromFlow": "value"
+    }
+  },
+  "Name": "ContactFlowEvent"
+}
+```
+
+## Best Practices
+
+### 1. Keep Functions Focused
+
+One Lambda per business capability:
+
+- `customer-lookup` - Customer data retrieval
+- `account-verification` - Account validation
+- `call-disposition` - Post-call recording
+
+### 2. Handle Errors Gracefully
+
+Always provide a fallback in your flows:
+
+```csharp
+.InvokeLambda(customerLookup, invoke => {
+    invoke.OnSuccess(/* happy path */);
+    invoke.OnError(/* graceful fallback */);
+    invoke.OnTimeout(/* timeout handling */);
+})
+```
+
+### 3. Use Environment Variables
+
+Don't hardcode configuration:
+
+```csharp
+.WithEnvironment("API_ENDPOINT", config.ApiEndpoint)
+.WithEnvironment("LOG_LEVEL", "INFO")
+```
+
+### 4. Set Appropriate Timeouts
+
+Connect has an 8-second limit for Lambda invocations:
+
+```csharp
+.WithTimeout(8)  // Match Connect's limit
+```
+
+### 5. Log Meaningfully
+
+```javascript
+console.log("Looking up customer:", phoneNumber);
+console.log("Customer found:", customer.name, "VIP:", customer.isVip);
+```
+
+## Related Documentation
+
+- [Flow Blocks Reference](/09-FLOW-BLOCKS-REFERENCE) - All flow actions including Lambda invocation
+- [Dynamic Configuration](/03-DYNAMIC-CONFIGURATION) - Store config outside your code
+- [Production Examples](/08-PRODUCTION-EXAMPLES) - Complete project structures

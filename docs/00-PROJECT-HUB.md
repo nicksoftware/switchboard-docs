@@ -13,32 +13,36 @@ Welcome to the Switchboard Architecture documentation. This section helps you ma
 ## 📚 Documentation Guide
 
 ### Quick Start
+
 - **[Quick Reference](/QUICK-REFERENCE)** - Decision summary and cheat sheet
 - **[Attribute Quick Guide](/ATTRIBUTE-REFERENCE-QUICK-GUIDE)** - Fast attribute lookup
 
 ### Architecture & Design
+
 - **[Architecture Patterns](/02-ARCHITECTURE-PATTERNS)** - Choose the right patterns for your use case
 - **[Dynamic Configuration](/03-DYNAMIC-CONFIGURATION)** - Runtime configuration without redeployment
 - **[Lambda Integration](/04-LANGUAGE-PERFORMANCE)** - Integrate Lambda functions in any language
 - **[Project Structure](/05-PROJECT-SETUP)** - Organize your contact center project
 
 ### Flow Design
+
 - **[Flow Blocks Reference](/09-FLOW-BLOCKS-REFERENCE)** - Complete flow block documentation
 - **[ASR & DTMF Design](/ASR-DTMF-DESIGN)** - Voice input and touch-tone patterns
 - **[Sequential Input](/SEQUENTIAL-INPUT-FOUNDATION)** - Multi-step input collection
 
 ### Best Practices
+
 - **[Deployment Strategies](/DEPLOYMENT-STRATEGIES)** - CI/CD and deployment patterns
 - **[Production Examples](/08-PRODUCTION-EXAMPLES)** - Real-world project structures
 
 ## 🔑 Key Decisions at a Glance
 
-| Question | Options | Guidance |
-|----------|---------|----------|
-| **Project Structure?** | Layer-based, Domain-centric, Hybrid | Choose based on team size and complexity |
-| **Lambda Language?** | JavaScript, Python, C#, Go, etc. | Use what your team knows best |
-| **Dynamic Config?** | DynamoDB, SSM Parameter Store, S3 | DynamoDB for complex configs, SSM for simple |
-| **Flow Design?** | Fluent API, Attribute-based, Hybrid | Fluent for simple, Attributes for complex |
+| Question               | Options                             | Guidance                                     |
+| ---------------------- | ----------------------------------- | -------------------------------------------- |
+| **Project Structure?** | Layer-based, Domain-centric, Hybrid | Choose based on team size and complexity     |
+| **Lambda Language?**   | JavaScript, Python, C#, Go, etc.    | Use what your team knows best                |
+| **Dynamic Config?**    | DynamoDB, SSM Parameter Store, S3   | DynamoDB for complex configs, SSM for simple |
+| **Flow Design?**       | Fluent API, Attribute-based, Hybrid | Fluent for simple, Attributes for complex    |
 
 ## 🚀 Getting Started
 
@@ -68,8 +72,9 @@ var customerLookup = ConnectLambda
 ```
 
 See [Lambda Integration Guide](/04-LANGUAGE-PERFORMANCE) for:
+
 - JavaScript/TypeScript Lambda examples
-- Python Lambda examples  
+- Python Lambda examples
 - .NET Lambda examples
 - Performance considerations for each language
 
@@ -78,6 +83,7 @@ See [Lambda Integration Guide](/04-LANGUAGE-PERFORMANCE) for:
 Use the [Flow Blocks Reference](/09-FLOW-BLOCKS-REFERENCE) to understand all available flow actions, then choose your design approach:
 
 **Fluent API** - Great for straightforward flows:
+
 ```csharp
 Flow.Create("MainMenu")
     .PlayPrompt("Welcome!")
@@ -89,13 +95,14 @@ Flow.Create("MainMenu")
 ```
 
 **Attribute-based** - Better for complex, reusable flows:
+
 ```csharp
 [ContactFlow("MainMenu")]
 public partial class MainMenuFlow : FlowDefinitionBase
 {
     [PlayPrompt("Welcome!")]
     public partial void Welcome();
-    
+
     [GetInput(MaxDigits = 1)]
     public partial void GetMenuChoice();
 }
@@ -104,6 +111,7 @@ public partial class MainMenuFlow : FlowDefinitionBase
 ### 4. Configure for Production
 
 Follow [Deployment Strategies](/DEPLOYMENT-STRATEGIES) to:
+
 - Set up multi-environment deployments
 - Configure CI/CD pipelines
 - Implement monitoring and alerting
@@ -111,18 +119,23 @@ Follow [Deployment Strategies](/DEPLOYMENT-STRATEGIES) to:
 ## 💡 Architecture Tips
 
 ### Start Simple
+
 Don't over-engineer your first deployment. Start with:
+
 - Basic project structure
 - A few core flows
 - Simple queue configuration
 
 ### Iterate Based on Needs
+
 Add complexity as needed:
+
 - Dynamic configuration when you need runtime updates
 - More sophisticated routing as call volume grows
 - Additional Lambda integrations as requirements evolve
 
 ### Use What You Know
+
 - **Lambda Language**: Use JavaScript, Python, or whatever your team is comfortable with
 - **Project Structure**: Adapt to your team's preferences
 - **Testing**: Use your existing testing frameworks

@@ -1,58 +1,126 @@
-# 🏛️ Architecture & Design Patterns
+# 🏛️ Architecture Patterns Guide
 
-## Framework Architecture Overview
+## Choosing Your Architecture Approach
 
-### Three-Layer Architecture with Dual APIs
+When building an Amazon Connect contact center with Switchboard, you have several architecture patterns to choose from. This guide helps you understand the tradeoffs and pick what works best for your team.
 
-```mermaid
-graph TB
-    subgraph "High-Level API (Consumer Layer)"
-        HL[High-Level Builders]
-        HL --> Fluent[Fluent Interface]
-        HL --> Presets[Preset Configurations]
-        HL --> Templates[Template Library]
-    end
-    
-    subgraph "Mid-Level API (Framework Core)"
-        Builders[Builder Pattern]
-        Factories[Factory Pattern]
-        Composites[Composite Pattern]
-        Strategies[Strategy Pattern]
-        Decorators[Decorator Pattern]
-    end
-    
-    subgraph "Low-Level API (Infrastructure Layer)"
-        L1[L1 CDK Constructs]
-        SDK[AWS SDK Direct Calls]
-        Custom[Custom Resources]
-    end
-    
-    HL --> Builders
-    Builders --> L1
-    Factories --> L1
-    Composites --> L1
-    
-    style HL fill:#90EE90
-    style Builders fill:#87CEEB  
-    style L1 fill:#FFB6C1
+---
+
+## Quick Decision Guide
+
+| If you...                             | Consider...                 |
+| ------------------------------------- | --------------------------- |
+| Have a small team (1-3 devs)          | Simple layered architecture |
+| Have a large team with domain experts | Domain-Driven Design (DDD)  |
+| Need maximum flexibility              | Low-level builder API       |
+| Want rapid development                | High-level fluent API       |
+| Have complex routing logic            | Strategy-based patterns     |
+| Need to share code across flows       | Modular/composite patterns  |
+
+---
+
+## Architecture Approaches
+
+### 1. Simple Layered Architecture
+
+Best for: **Small teams, straightforward contact centers**
+
+Organize your code by resource type:
+
+```
+src/
+├── Flows/           # All contact flows
+├── Queues/          # All queues
+├── Hours/           # Hours of operation
+├── Lambdas/         # Custom functions
+└── Program.cs       # Entry point
 ```
 
-### Core Design Principles
+**Pros:**
 
-1. **Separation of Concerns**: Each layer has distinct responsibilities
-2. **Open/Closed Principle**: Open for extension, closed for modification
-3. **Dependency Inversion**: Depend on abstractions, not concretions
-4. **Interface Segregation**: Small, focused interfaces
-5. **Single Responsibility**: Each class has one reason to change
-6. **DRY (Don't Repeat Yourself)**: Shared logic in base classes/helpers
+- Easy to understand and navigate
+- Low cognitive overhead
+- Quick to get started
 
-## Gang of Four (GOF) Design Patterns
+**Cons:**
 
-### 1. Builder Pattern (Creational)
+- Doesn't scale well to large projects
+- Hard to see business domain relationships
 
-**Purpose**: Construct complex contact flows step-by-step with fluent interface.
+---
 
-**Implementation**:
+### 2. Domain-Driven Design (DDD)
+
+Best for: **Large teams, complex business logic**
+
+Organize by business domain:
+
+```
+src/
+├── Domains/
+│   ├── Sales/               # Sales team resources
+│   │   ├── Flows/
+│   │   ├── Queues/
+│   │   └── Lambdas/
+│   ├── Support/             # Support team resources
+│   │   ├── Flows/
+│   │   ├── Queues/
+│   │   └── Lambdas/
+│   └── Billing/             # Billing team resources
+├── Shared/                  # Cross-cutting concerns
+└── Program.cs
+```
+
+**Pros:**
+
+- Clear business boundaries
+- Teams can own domains independently
+- Scales well to large organizations
+- Business logic stays together
+
+**Cons:**
+
+- More upfront planning required
+- Steeper learning curve
+- May have some duplication
+
+---
+
+### 3. Module-Based Architecture
+
+Best for: **Reusable components, multiple contact centers**
+
+Organize by reusable modules:
+
+```
+src/
+├── Modules/
+│   ├── Authentication/      # Customer auth module
+│   ├── Voicemail/           # Voicemail module
+│   ├── Callback/            # Callback module
+│   └── Survey/              # Post-call survey
+├── Flows/                   # Flows that use modules
+└── Program.cs
+```
+
+**Pros:**
+
+- Maximum reusability
+- Tested, reliable components
+- Easy to share across projects
+
+**Cons:**
+
+- Requires careful interface design
+- May overcomplicate simple projects
+
+---
+
+## Flow Building Approaches
+
+### Option A: High-Level Fluent API
+
+Use the fluent builder for rapid development:
 
 ```csharp
 // Abstract builder interface
@@ -138,10 +206,10 @@ public class ContactFlowBuilder : IContactFlowBuilder
     {
         if (string.IsNullOrEmpty(flow.Name))
             throw new InvalidOperationException("Flow must have a name");
-        
+
         if (flow.Actions.Count == 0)
             throw new InvalidOperationException("Flow must have at least one action");
-        
+
         if (flow.Actions.Count > 250)
             throw new InvalidOperationException("Flow cannot exceed 250 actions");
     }
@@ -249,10 +317,10 @@ public class StandardFlowActionFactory : IFlowActionFactory
         var actionData = JsonSerializer.Deserialize<JsonElement>(json);
         var typeString = actionData.GetProperty("Type").GetString();
         var type = Enum.Parse<ActionType>(typeString);
-        
+
         var action = CreateAction(type);
         action.Deserialize(actionData);
-        
+
         return action;
     }
 }
@@ -337,7 +405,7 @@ public class SkillBasedRoutingStrategy : IRoutingStrategy
     public string DetermineQueue(ContactAttributes attributes, List<QueueInfo> availableQueues)
     {
         var requiredSkills = attributes.GetStringList("RequiredSkills");
-        
+
         var matchingQueue = availableQueues
             .Where(q => q.Skills.Intersect(requiredSkills).Count() == requiredSkills.Count)
             .OrderBy(q => q.CurrentQueueSize)
@@ -359,7 +427,7 @@ public class VipRoutingStrategy : IRoutingStrategy
     public string DetermineQueue(ContactAttributes attributes, List<QueueInfo> availableQueues)
     {
         var isVip = attributes.GetBool("IsVIP", false);
-        
+
         if (isVip)
         {
             var vipQueue = availableQueues.FirstOrDefault(q => q.Name.Contains("VIP"));
@@ -394,7 +462,7 @@ public class RoutingContext
     }
 
     public RoutingDecision MakeRoutingDecision(
-        ContactAttributes attributes, 
+        ContactAttributes attributes,
         List<QueueInfo> availableQueues)
     {
         var queueArn = _strategy.DetermineQueue(attributes, availableQueues);
@@ -479,7 +547,7 @@ public class LoggingContactFlowDecorator : ContactFlowDecorator
 {
     private readonly ILogger _logger;
 
-    public LoggingContactFlowDecorator(IContactFlow flow, ILogger logger) 
+    public LoggingContactFlowDecorator(IContactFlow flow, ILogger logger)
         : base(flow)
     {
         _logger = logger;
@@ -491,14 +559,14 @@ public class LoggingContactFlowDecorator : ContactFlowDecorator
         _logger.LogInformation($"Contact ID: {context.ContactId}");
 
         var stopwatch = Stopwatch.StartNew();
-        
+
         try
         {
             var result = base.Execute(context);
-            
+
             stopwatch.Stop();
             _logger.LogInformation($"Flow completed in {stopwatch.ElapsedMilliseconds}ms");
-            
+
             return result;
         }
         catch (Exception ex)
@@ -519,7 +587,7 @@ public class ValidationContactFlowDecorator : ContactFlowDecorator
     {
         ValidateContext(context);
         ValidateFlow();
-        
+
         return base.Execute(context);
     }
 
@@ -540,10 +608,10 @@ public class ValidationContactFlowDecorator : ContactFlowDecorator
     {
         // Validate flow structure
         var flowData = JsonSerializer.Deserialize<ContactFlow>(_decoratedFlow.ToJson());
-        
+
         if (flowData.Actions.Count > 250)
             throw new ValidationException("Flow exceeds maximum 250 actions");
-        
+
         if (flowData.Actions.Count == 0)
             throw new ValidationException("Flow must have at least one action");
     }
@@ -567,7 +635,7 @@ public class CachingContactFlowDecorator : ContactFlowDecorator
     private readonly IMemoryCache _cache;
     private string _cachedJson;
 
-    public CachingContactFlowDecorator(IContactFlow flow, IMemoryCache cache) 
+    public CachingContactFlowDecorator(IContactFlow flow, IMemoryCache cache)
         : base(flow)
     {
         _cache = cache;
@@ -579,17 +647,17 @@ public class CachingContactFlowDecorator : ContactFlowDecorator
             return _cachedJson;
 
         var cacheKey = $"flow_json_{Name}";
-        
+
         if (_cache.TryGetValue(cacheKey, out string cached))
         {
             return cached;
         }
 
         var json = base.ToJson();
-        
+
         _cache.Set(cacheKey, json, TimeSpan.FromMinutes(10));
         _cachedJson = json;
-        
+
         return json;
     }
 }
@@ -851,7 +919,7 @@ public sealed class ConnectConfigurationManager
             }
 
             var config = await FetchFromDynamoDB(flowId);
-            
+
             _cache.Set(cacheKey, config, new MemoryCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5),
@@ -938,7 +1006,7 @@ public class CacheInvalidationObserver : IConfigurationObserver
     {
         var cacheKey = $"flow_config_{changeEvent.FlowId}";
         _cache.Remove(cacheKey);
-        
+
         Console.WriteLine($"Cache invalidated for {changeEvent.FlowId}");
     }
 }
@@ -979,7 +1047,7 @@ public class NotificationObserver : IConfigurationObserver
     public void Update(ConfigurationChangeEvent changeEvent)
     {
         var message = $"Configuration changed for {changeEvent.FlowId} by {changeEvent.ChangedBy}";
-        
+
         _sns.PublishAsync(_topicArn, message);
     }
 }
@@ -1065,7 +1133,7 @@ public class DynamoDbFlowConfigurationRepository : IFlowConfigurationRepository
     {
         config.Version = await GetLatestVersionAsync(config.FlowId) + 1;
         config.CreatedAt = DateTime.UtcNow;
-        
+
         await _context.SaveAsync(config, new DynamoDBOperationConfig
         {
             OverrideTableName = _tableName
@@ -1084,7 +1152,7 @@ public interface IUnitOfWork : IDisposable
     IFlowConfigurationRepository Flows { get; }
     IQueueConfigurationRepository Queues { get; }
     IRoutingConfigurationRepository Routing { get; }
-    
+
     Task<int> CommitAsync();
     Task RollbackAsync();
 }
@@ -1104,7 +1172,7 @@ public class DynamoDbUnitOfWork : IUnitOfWork
         _dynamoDb = dynamoDb;
         _operations = new List<Action>();
         _rollbackOperations = new List<Action>();
-        
+
         Flows = new DynamoDbFlowConfigurationRepository(dynamoDb, "ConnectFlowConfigurations");
         Queues = new DynamoDbQueueConfigurationRepository(dynamoDb, "ConnectQueueConfigurations");
         Routing = new DynamoDbRoutingConfigurationRepository(dynamoDb, "ConnectRoutingConfigurations");
@@ -1113,7 +1181,7 @@ public class DynamoDbUnitOfWork : IUnitOfWork
     public async Task<int> CommitAsync()
     {
         var count = 0;
-        
+
         foreach (var operation in _operations)
         {
             operation();
@@ -1190,7 +1258,7 @@ public class CreateFlowConfigurationHandler : ICommandHandler<CreateFlowConfigur
         };
 
         await _repository.CreateAsync(config);
-        
+
         await _eventPublisher.PublishAsync(new FlowConfigurationCreatedEvent
         {
             FlowId = config.FlowId,
@@ -1226,16 +1294,16 @@ public class GetFlowConfigurationHandler : IQueryHandler<GetFlowConfigurationQue
     public async Task<FlowConfiguration> HandleAsync(GetFlowConfigurationQuery query)
     {
         var cacheKey = $"flow_config_{query.FlowId}";
-        
+
         if (_cache.TryGetValue(cacheKey, out FlowConfiguration cached))
         {
             return cached;
         }
 
         var config = await _repository.GetActiveVersionAsync(query.FlowId);
-        
+
         _cache.Set(cacheKey, config, TimeSpan.FromMinutes(5));
-        
+
         return config;
     }
 }
@@ -1270,7 +1338,7 @@ public class ConnectFrameworkExample
 
         // Use repository pattern for data access
         using var unitOfWork = new DynamoDbUnitOfWork(dynamoClient);
-        
+
         // Create configuration using CQRS command
         var command = new CreateFlowConfigurationCommand
         {

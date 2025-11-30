@@ -1,14 +1,14 @@
-# 🏭 Production-Ready Examples & Deployment Patterns
+# 🏭 Production Examples & Project Structures
 
 ## Overview
 
-This document provides production-ready example project structures, configurations, and deployment patterns for real-world scenarios.
+This document provides example project structures, configurations, and deployment patterns for real-world contact center implementations. Choose the approach that best fits your team's preferences and project complexity.
 
 ---
 
 ## Table of Contents
 
-1. [Production Project Structure](#1-production-project-structure)
+1. [Project Structure Options](#1-project-structure-options)
 2. [Scenario 1: New Connect Instance](#2-scenario-1-new-connect-instance-greenfield)
 3. [Scenario 2: Existing Connect Instance](#3-scenario-2-existing-connect-instance-brownfield)
 4. [Environment Configuration](#4-environment-configuration)
@@ -21,134 +21,136 @@ This document provides production-ready example project structures, configuratio
 
 ---
 
-## 1. Production Project Structure
+## 1. Project Structure Options
 
-### Recommended Folder Structure
+There's no single "right" way to structure your contact center project. Choose the approach that fits your team:
+
+### Option A: Layer-Based Structure
+
+Organize by resource type. Good for smaller teams or simpler contact centers:
 
 ```
 ProductionCallCenter/
 ├── src/
-│   ├── Flows/                          # Contact flow definitions
-│   │   ├── Inbound/
-│   │   │   ├── SalesInboundFlow.cs
-│   │   │   ├── SupportInboundFlow.cs
-│   │   │   └── AfterHoursFlow.cs
-│   │   ├── Outbound/
-│   │   │   ├── CustomerFollowUpFlow.cs
-│   │   │   └── SurveyFlow.cs
-│   │   ├── Transfer/
-│   │   │   ├── AgentTransferFlow.cs
-│   │   │   └── QueueTransferFlow.cs
-│   │   └── Shared/
-│   │       ├── AuthenticationModule.cs
-│   │       ├── VoicemailModule.cs
-│   │       └── CallbackModule.cs
+│   ├── Flows/                          # All contact flows
+│   │   ├── SalesInboundFlow.cs
+│   │   ├── SupportInboundFlow.cs
+│   │   └── AfterHoursFlow.cs
 │   │
-│   ├── Queues/                         # Queue definitions
+│   ├── Queues/                         # All queue definitions
 │   │   ├── SalesQueues.cs
-│   │   ├── SupportQueues.cs
-│   │   └── EscalationQueues.cs
+│   │   └── SupportQueues.cs
 │   │
-│   ├── RoutingProfiles/                # Routing profile definitions
-│   │   ├── SalesAgentProfile.cs
-│   │   ├── SupportAgentProfile.cs
-│   │   └── SupervisorProfile.cs
+│   ├── RoutingProfiles/                # All routing profiles
 │   │
 │   ├── Hours/                          # Hours of operation
-│   │   ├── BusinessHours.cs
-│   │   ├── HolidayHours.cs
-│   │   └── ExtendedSupportHours.cs
 │   │
-│   ├── Prompts/                        # Audio prompts
-│   │   ├── PromptDefinitions.cs
-│   │   └── AudioFiles/
-│   │       ├── welcome.wav
-│   │       ├── hold-music.wav
-│   │       └── after-hours.wav
-│   │
-│   ├── Lambdas/                        # Custom Lambda functions
-│   │   ├── CustomerLookup/
-│   │   │   ├── Function.cs
-│   │   │   ├── Models.cs
-│   │   │   └── CustomerLookup.csproj
-│   │   ├── CallDisposition/
-│   │   │   ├── Function.cs
-│   │   │   └── CallDisposition.csproj
-│   │   └── Shared/
-│   │       ├── ConnectExtensions.cs
-│   │       └── SharedModels.cs
-│   │
-│   ├── Stacks/                         # CDK Stack definitions
-│   │   ├── ConnectInstanceStack.cs
-│   │   ├── FlowsStack.cs
-│   │   ├── QueuesStack.cs
-│   │   ├── LambdasStack.cs
-│   │   ├── DynamoDbStack.cs
-│   │   └── MonitoringStack.cs
-│   │
-│   ├── Configuration/                  # Configuration models
-│   │   ├── ConnectConfiguration.cs
-│   │   ├── FlowConfiguration.cs
-│   │   └── EnvironmentConfiguration.cs
+│   ├── Lambdas/                        # Lambda functions (any language)
+│   │   ├── customer-lookup/            # Node.js example
+│   │   │   ├── index.js
+│   │   │   └── package.json
+│   │   └── call-disposition/           # Python example
+│   │       ├── lambda_function.py
+│   │       └── requirements.txt
 │   │
 │   └── Program.cs                      # Entry point
 │
-├── config/                             # Environment configurations
-│   ├── appsettings.json                # Base configuration
-│   ├── appsettings.Development.json
-│   ├── appsettings.Staging.json
-│   ├── appsettings.Production.json
-│   └── secrets/                        # Secrets (gitignored)
-│       ├── dev-secrets.json
-│       └── prod-secrets.json
-│
-├── infrastructure/                     # Infrastructure as Code
-│   ├── cdk.json
-│   ├── cdk.context.json
-│   └── environments/
-│       ├── dev.json
-│       ├── staging.json
-│       └── production.json
-│
-├── scripts/                            # Deployment scripts
-│   ├── deploy.sh
-│   ├── rollback.sh
-│   ├── validate.sh
-│   └── seed-data.sh
-│
-├── tests/                              # Tests
-│   ├── Unit/
-│   ├── Integration/
-│   └── E2E/
-│
-├── docs/                               # Documentation
-│   ├── architecture.md
-│   ├── deployment.md
-│   ├── runbook.md
-│   └── flow-diagrams/
-│
-├── .github/                            # GitHub Actions
-│   └── workflows/
-│       ├── ci.yml
-│       ├── deploy-dev.yml
-│       ├── deploy-staging.yml
-│       └── deploy-production.yml
-│
-├── .gitignore
-├── README.md
+├── config/
+├── tests/
 └── ProductionCallCenter.sln
 ```
+
+### Option B: Domain-Centric Structure (DDD)
+
+Organize by business domain. Good for larger teams or complex contact centers:
+
+```
+ProductionCallCenter/
+├── src/
+│   ├── Domains/
+│   │   ├── Sales/                      # Everything sales-related
+│   │   │   ├── Flows/
+│   │   │   │   ├── InboundFlow.cs
+│   │   │   │   └── CallbackFlow.cs
+│   │   │   ├── Queues/
+│   │   │   │   └── SalesQueue.cs
+│   │   │   ├── Lambdas/
+│   │   │   │   └── lead-scoring/
+│   │   │   └── SalesDomain.cs          # Domain registration
+│   │   │
+│   │   ├── Support/                    # Everything support-related
+│   │   │   ├── Flows/
+│   │   │   ├── Queues/
+│   │   │   ├── Lambdas/
+│   │   │   └── SupportDomain.cs
+│   │   │
+│   │   └── Billing/                    # Everything billing-related
+│   │       ├── Flows/
+│   │       ├── Queues/
+│   │       └── BillingDomain.cs
+│   │
+│   ├── Shared/                         # Cross-domain resources
+│   │   ├── Flows/
+│   │   │   └── AuthenticationModule.cs
+│   │   ├── Lambdas/
+│   │   │   └── customer-lookup/
+│   │   └── Hours/
+│   │
+│   └── Program.cs
+│
+├── config/
+├── tests/
+└── ProductionCallCenter.sln
+```
+
+### Option C: Hybrid Structure
+
+Mix approaches based on complexity:
+
+```
+ProductionCallCenter/
+├── src/
+│   ├── Core/                           # Shared resources
+│   │   ├── Hours/
+│   │   ├── SharedFlows/
+│   │   └── SharedLambdas/
+│   │
+│   ├── CustomerService/                # Complex domain - DDD style
+│   │   ├── Flows/
+│   │   ├── Queues/
+│   │   └── Lambdas/
+│   │
+│   ├── Queues/                         # Simple resources - layer style
+│   │   └── GeneralQueues.cs
+│   │
+│   └── Program.cs
+│
+├── config/
+└── tests/
+```
+
+### Choosing Your Structure
+
+| Factor              | Layer-Based      | Domain-Centric   | Hybrid |
+| ------------------- | ---------------- | ---------------- | ------ |
+| **Team size**       | 1-3 developers   | 4+ developers    | Any    |
+| **Complexity**      | Simple-Medium    | Complex          | Varies |
+| **Onboarding**      | Easy             | Steeper curve    | Medium |
+| **Scalability**     | Limited          | High             | High   |
+| **Discoverability** | By resource type | By business area | Mixed  |
 
 ---
 
 ## 2. Scenario 1: New Connect Instance (Greenfield)
 
 ### Use Case
+
 Creating a brand new Amazon Connect contact center from scratch.
 
 ### Project Structure
 
 **Program.cs**:
+
 ```csharp
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -315,7 +317,7 @@ app.Synth();
       "MaxContacts": 100,
       "ServiceLevel": {
         "Threshold": 20,
-        "Target": 0.80
+        "Target": 0.8
       },
       "OutboundCallerId": {
         "Name": "Sales Team",
@@ -438,6 +440,7 @@ app.Synth();
 ## 3. Scenario 2: Existing Connect Instance (Brownfield)
 
 ### Use Case
+
 Importing an existing Amazon Connect instance and managing it with the framework.
 
 ### Program.cs (Existing Instance)
@@ -634,15 +637,8 @@ public class ExistingInstanceStack : Stack
   },
 
   "NewResources": {
-    "Flows": [
-      "NewSalesFlow",
-      "NewSupportFlow",
-      "EnhancedRoutingFlow"
-    ],
-    "Lambdas": [
-      "CustomerLookup",
-      "CallDisposition"
-    ]
+    "Flows": ["NewSalesFlow", "NewSupportFlow", "EnhancedRoutingFlow"],
+    "Lambdas": ["CustomerLookup", "CallDisposition"]
   }
 }
 ```
@@ -695,6 +691,7 @@ public class MigrationStrategy
 ### Multi-Environment Setup
 
 **appsettings.Development.json**:
+
 ```json
 {
   "AmazonConnect": {
@@ -725,6 +722,7 @@ public class MigrationStrategy
 ```
 
 **appsettings.Staging.json**:
+
 ```json
 {
   "AmazonConnect": {
@@ -751,6 +749,7 @@ public class MigrationStrategy
 ```
 
 **appsettings.Production.json**:
+
 ```json
 {
   "AmazonConnect": {
@@ -806,6 +805,7 @@ public class MigrationStrategy
 ### Environment-Specific Deployment Script
 
 **scripts/deploy.sh**:
+
 ```bash
 #!/bin/bash
 
@@ -891,6 +891,7 @@ echo "Running post-deployment validation..."
 ### GitHub Actions Workflow
 
 **.github/workflows/deploy-production.yml**:
+
 ```yaml
 name: Deploy to Production
 
@@ -905,9 +906,9 @@ on:
         required: true
 
 env:
-  DOTNET_VERSION: '10.0.x'
-  NODE_VERSION: '20.x'
-  AWS_REGION: 'us-east-1'
+  DOTNET_VERSION: "10.0.x"
+  NODE_VERSION: "20.x"
+  AWS_REGION: "us-east-1"
 
 jobs:
   validate:
@@ -1049,7 +1050,7 @@ jobs:
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
-          text: 'Production deployment ${{ job.status }}'
+          text: "Production deployment ${{ job.status }}"
           webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 
   rollback:
@@ -1491,6 +1492,7 @@ public class BackupStack : Stack
 ### Rollback Script
 
 **scripts/rollback.sh**:
+
 ```bash
 #!/bin/bash
 
@@ -1621,6 +1623,7 @@ public class MultiRegionStack : Stack
 Location: `examples/EnterpriseCallCenter/`
 
 **Key Features**:
+
 - Multi-queue setup (Sales, Support, Escalation, VIP)
 - Skill-based routing
 - Business hours checking
@@ -1635,6 +1638,7 @@ Location: `examples/EnterpriseCallCenter/`
 Location: `examples/ExistingInstanceMigration/`
 
 **Key Features**:
+
 - Import existing Connect instance
 - Reference existing queues and routing profiles
 - Add new flows alongside existing ones
@@ -1647,6 +1651,7 @@ Location: `examples/ExistingInstanceMigration/`
 Location: `examples/MultiB randCallCenter/`
 
 **Key Features**:
+
 - Multiple brands sharing infrastructure
 - Brand-specific routing and flows
 - Shared agent pools
@@ -1658,6 +1663,7 @@ Location: `examples/MultiB randCallCenter/`
 Location: `examples/HighVolumeCallCenter/`
 
 **Key Features**:
+
 - Optimized for >10,000 concurrent calls
 - Auto-scaling Lambda functions
 - DynamoDB with provisioned capacity
@@ -1680,6 +1686,7 @@ This document provides production-ready examples covering:
 ✅ **Real-world configurations** - Production-ready settings
 
 All examples include:
+
 - Complete folder structures
 - Configuration files
 - Deployment scripts
