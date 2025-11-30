@@ -1,5 +1,9 @@
 # Building Contact Flows
 
+::: tip Looking for API Reference?
+For detailed documentation of each flow block (PlayPrompt, GetCustomerInput, InvokeLambda, etc.), see the **[Flow Building Blocks Reference](/reference/building-blocks/)**.
+:::
+
 ## What is a Contact Flow?
 
 A **contact flow** is like a roadmap for customer phone calls. It tells Amazon Connect what to do when someone calls your contact center - should they hear a greeting? Get routed to a queue? Talk to an agent? Press buttons to navigate a menu?

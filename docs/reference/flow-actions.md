@@ -6,10 +6,15 @@ Switchboard is currently in **preview** (v0.1.0-preview.17). Comprehensive flow 
 
 This reference documents the available flow actions you can use when building contact flows.
 
+::: tip Looking for detailed block documentation?
+See the **[Flow Building Blocks Reference](/reference/building-blocks/)** for comprehensive API documentation for each flow block, including all parameters, configuration options, and examples.
+:::
+
 ## Quick Reference
 
 For working examples, see:
 
+- **[Flow Building Blocks](/reference/building-blocks/)** - Detailed API for each block
 - **[Building Flows Guide](/building/flows.md)** - Tutorial with examples
 - **[Minimal Setup Examples](/examples/minimal-setup.md)** - 8 common patterns
 - **[Complete Example](/building/complete-example.md)** - Full contact center

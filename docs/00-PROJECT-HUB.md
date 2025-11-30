@@ -1,111 +1,135 @@
-# 🏗️ Amazon Connect CDK Framework - Project Hub
+# 🏗️ Contact Center Architecture Hub
 
-**Mission**: Build a developer-focused, code-first, testable framework for configuring Amazon Connect using C# and AWS CDK with dynamic runtime configuration capabilities.
+Welcome to the Switchboard Architecture documentation. This section helps you make informed decisions when designing and building your Amazon Connect contact center.
 
-## 🎯 Project Goals
+## 🎯 What You'll Learn
 
-- **Code-First Approach**: Everything configurable through C# code
-- **Testable**: Comprehensive unit, integration, and end-to-end testing
-- **Version Controlled**: All infrastructure and configurations in Git
-- **Dynamic Configuration**: Runtime configuration via DynamoDB without redeployment
-- **Dual-Layer APIs**: High-level abstractions + low-level access for flexibility
-- **Production Ready**: Enterprise-grade reliability and performance
-- **Fast Lambda Execution**: Optimized for minimal cold start and execution time
+- How to structure your contact center project
+- When to use different architectural patterns
+- How to integrate Lambda functions (in any language)
+- Best practices for production deployments
+- Dynamic configuration strategies
 
-## 📚 Documentation Structure
+## 📚 Documentation Guide
 
-### Planning & Architecture
-1. **[Technical Research & Analysis](01-TECHNICAL-RESEARCH.md)** - AWS CDK capabilities and limitations
-2. **[Architecture & Design Patterns](02-ARCHITECTURE-PATTERNS.md)** - GOF patterns, system design, layered architecture
-3. **[Dynamic Configuration Strategy](03-DYNAMIC-CONFIGURATION.md)** - DynamoDB-driven runtime config
-4. **[Language & Performance](04-LANGUAGE-PERFORMANCE.md)** - C# vs alternatives for Lambda
+### Quick Start
+- **[Quick Reference](/QUICK-REFERENCE)** - Decision summary and cheat sheet
+- **[Attribute Quick Guide](/ATTRIBUTE-REFERENCE-QUICK-GUIDE)** - Fast attribute lookup
 
-### Implementation Guide
-5. **[Project Structure & Setup](05-PROJECT-SETUP.md)** - Initial scaffolding and organization
-6. **[Framework Components](06-FRAMEWORK-COMPONENTS.md)** - Core components and their responsibilities
-7. **[Testing Strategy](07-TESTING-STRATEGY.md)** - Comprehensive testing approach
-8. **[CI/CD Pipeline](08-CICD-PIPELINE.md)** - Automated deployment pipeline
+### Architecture & Design
+- **[Architecture Patterns](/02-ARCHITECTURE-PATTERNS)** - Choose the right patterns for your use case
+- **[Dynamic Configuration](/03-DYNAMIC-CONFIGURATION)** - Runtime configuration without redeployment
+- **[Lambda Integration](/04-LANGUAGE-PERFORMANCE)** - Integrate Lambda functions in any language
+- **[Project Structure](/05-PROJECT-SETUP)** - Organize your contact center project
 
-### Reference Materials
-9. **[Amazon Connect Resource Inventory](09-RESOURCE-INVENTORY.md)** - Complete resource catalog
-10. **[Code Examples & Patterns](10-CODE-EXAMPLES.md)** - Practical implementation examples
-11. **[Troubleshooting Guide](11-TROUBLESHOOTING.md)** - Common issues and solutions
+### Flow Design
+- **[Flow Blocks Reference](/09-FLOW-BLOCKS-REFERENCE)** - Complete flow block documentation
+- **[ASR & DTMF Design](/ASR-DTMF-DESIGN)** - Voice input and touch-tone patterns
+- **[Sequential Input](/SEQUENTIAL-INPUT-FOUNDATION)** - Multi-step input collection
 
-## 📊 Project Status
+### Best Practices
+- **[Deployment Strategies](/DEPLOYMENT-STRATEGIES)** - CI/CD and deployment patterns
+- **[Production Examples](/08-PRODUCTION-EXAMPLES)** - Real-world project structures
 
-**Current Phase**: Architecture Design & Planning
+## 🔑 Key Decisions at a Glance
 
-**Completed**:
-- ✅ Technical research on AWS CDK Connect support
-- ✅ Analysis of CloudFormation coverage
-- ✅ Architecture patterns research
-- ✅ Dynamic configuration strategy design
+| Question | Options | Guidance |
+|----------|---------|----------|
+| **Project Structure?** | Layer-based, Domain-centric, Hybrid | Choose based on team size and complexity |
+| **Lambda Language?** | JavaScript, Python, C#, Go, etc. | Use what your team knows best |
+| **Dynamic Config?** | DynamoDB, SSM Parameter Store, S3 | DynamoDB for complex configs, SSM for simple |
+| **Flow Design?** | Fluent API, Attribute-based, Hybrid | Fluent for simple, Attributes for complex |
 
-**In Progress**:
-- 🔄 Design pattern implementation details
-- 🔄 Project structure definition
-- 🔄 Performance optimization research
+## 🚀 Getting Started
 
-**Next Steps**:
-1. Finalize architecture decisions
-2. Set up initial project structure
-3. Implement core data models
-4. Build POC for dynamic configuration with DynamoDB
-5. Performance benchmark C# Lambda functions
+### 1. Choose Your Project Structure
 
-## 🔑 Key Architecture Decisions
+See [Project Structure Examples](/08-PRODUCTION-EXAMPLES) for different approaches:
 
-### Framework Split: Unified with Separation of Concerns
+- **Layer-based** - Organized by resource type (Flows/, Queues/, Lambdas/)
+- **Domain-centric** - Organized by business domain (Sales/, Support/, Billing/)
+- **Hybrid** - Mix of both based on your needs
 
-**Decision**: Single framework with clear separation between:
-- **Infrastructure Layer**: CDK constructs for resource provisioning
-- **Configuration Layer**: Dynamic runtime configuration via DynamoDB
-- **Business Logic Layer**: Lambda functions for flow execution logic
+### 2. Plan Your Lambda Integration
 
-**Rationale**: This approach provides:
-- Single deployment pipeline
-- Consistent versioning
-- Shared code and patterns
-- Clear boundaries without artificial splits
+Switchboard makes it easy to integrate Lambda functions written in **any language**:
 
-### Language: C# with Native AOT (Future)
+```csharp
+// Add a Lambda function to your contact center
+var customerLookup = ConnectLambda
+    .Create("customer-lookup")
+    .WithId("CustomerLookupLambda")
+    .WithCode("./lambdas/customer-lookup")  // Your Lambda code (any language)
+    .WithHandler("index.handler")            // Node.js example
+    .WithMemory(512)
+    .WithTimeout(30)
+    .AssociateWithConnect(stack.InstanceId)
+    .Build(stack);
+```
 
-**Decision**: Use C# for both CDK and Lambda functions
-- **CDK**: C# with .NET 8+
-- **Lambda**: C# with .NET 8 (Native AOT when stable for Connect workloads)
+See [Lambda Integration Guide](/04-LANGUAGE-PERFORMANCE) for:
+- JavaScript/TypeScript Lambda examples
+- Python Lambda examples  
+- .NET Lambda examples
+- Performance considerations for each language
 
-**Rationale**: 
-- Single language across stack
-- Strong typing and tooling
-- Excellent performance with Native AOT
-- Rich ecosystem
+### 3. Design Your Flows
 
-### Dynamic Configuration Pattern
+Use the [Flow Blocks Reference](/09-FLOW-BLOCKS-REFERENCE) to understand all available flow actions, then choose your design approach:
 
-**Decision**: DynamoDB-backed configuration with Lambda fetchers
-- Configuration stored in DynamoDB tables
-- Lambda functions fetch and cache configurations
-- Flow JSON templates stored in S3
-- Parameter substitution at runtime
+**Fluent API** - Great for straightforward flows:
+```csharp
+Flow.Create("MainMenu")
+    .PlayPrompt("Welcome!")
+    .GetCustomerInput("Press 1 for Sales, 2 for Support")
+    .Branch()
+        .When("1", b => b.TransferToQueue("Sales"))
+        .When("2", b => b.TransferToQueue("Support"))
+    .Build(stack);
+```
 
-## 🎨 Design Philosophy
+**Attribute-based** - Better for complex, reusable flows:
+```csharp
+[ContactFlow("MainMenu")]
+public partial class MainMenuFlow : FlowDefinitionBase
+{
+    [PlayPrompt("Welcome!")]
+    public partial void Welcome();
+    
+    [GetInput(MaxDigits = 1)]
+    public partial void GetMenuChoice();
+}
+```
 
-1. **Convention over Configuration**: Sensible defaults, explicit when needed
-2. **Composability**: Small, reusable components
-3. **Type Safety**: Leverage C# type system to prevent errors
-4. **Testability**: Every component independently testable
-5. **Performance**: Optimized Lambda cold starts and execution
+### 4. Configure for Production
 
-## 🔗 Quick Links
+Follow [Deployment Strategies](/DEPLOYMENT-STRATEGIES) to:
+- Set up multi-environment deployments
+- Configure CI/CD pipelines
+- Implement monitoring and alerting
 
-- **AWS CDK Documentation**: https://docs.aws.amazon.com/cdk/
-- **Amazon Connect API**: https://docs.aws.amazon.com/connect/latest/APIReference/
-- **Connect Flow Language**: https://docs.aws.amazon.com/connect/latest/APIReference/flow-language.html
-- **C# Lambda Best Practices**: https://docs.aws.amazon.com/lambda/latest/dg/csharp-handler.html
+## 💡 Architecture Tips
 
-## 📝 Notes
+### Start Simple
+Don't over-engineer your first deployment. Start with:
+- Basic project structure
+- A few core flows
+- Simple queue configuration
 
-- All documentation is in Markdown for easy version control and portability
-- Code examples use .NET 8 features
-- Architecture diagrams use Mermaid syntax
-- Import these documents into Notion or your preferred documentation system
+### Iterate Based on Needs
+Add complexity as needed:
+- Dynamic configuration when you need runtime updates
+- More sophisticated routing as call volume grows
+- Additional Lambda integrations as requirements evolve
+
+### Use What You Know
+- **Lambda Language**: Use JavaScript, Python, or whatever your team is comfortable with
+- **Project Structure**: Adapt to your team's preferences
+- **Testing**: Use your existing testing frameworks
+
+## 🔗 Related Resources
+
+- [User Guide](/guide/introduction) - Getting started with Switchboard
+- [Building Guide](/building/flows) - Step-by-step resource creation
+- [Examples](/examples/minimal-setup) - Complete working examples
+- [API Reference](/reference/stack) - Detailed API documentation
