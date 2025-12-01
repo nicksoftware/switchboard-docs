@@ -8,6 +8,7 @@ Check blocks evaluate conditions and branch the flow based on the result. They a
 - [CheckHoursOfOperation](./check-hours-of-operation.md) - Branch based on business hours
 - [CheckStaffing](./check-staffing.md) - Branch based on agent availability
 - [CheckQueueStatus](./check-queue-status.md) - Branch based on queue metrics
+- [GetQueueMetrics](./get-queue-metrics.md) - Retrieve real-time queue statistics
 
 ## Overview
 
@@ -67,14 +68,14 @@ Flow.Create("Smart Queue")
 
 CheckContactAttribute supports multiple comparison operators:
 
-| Method | Description | Example |
-|--------|-------------|---------|
-| `.Equals(value)` | Exact match | `.Equals("VIP", ...)` |
-| `.NotEquals(value)` | Not equal | `.NotEquals("Blocked", ...)` |
-| `.Contains(value)` | Contains substring | `.Contains("Premium", ...)` |
-| `.GreaterThan(value)` | Numeric greater than | `.GreaterThan("100", ...)` |
-| `.LessThan(value)` | Numeric less than | `.LessThan("5", ...)` |
-| `.Otherwise()` | Default case | `.Otherwise(...)` |
+| Method                | Description          | Example                      |
+| --------------------- | -------------------- | ---------------------------- |
+| `.Equals(value)`      | Exact match          | `.Equals("VIP", ...)`        |
+| `.NotEquals(value)`   | Not equal            | `.NotEquals("Blocked", ...)` |
+| `.Contains(value)`    | Contains substring   | `.Contains("Premium", ...)`  |
+| `.GreaterThan(value)` | Numeric greater than | `.GreaterThan("100", ...)`   |
+| `.LessThan(value)`    | Numeric less than    | `.LessThan("5", ...)`        |
+| `.Otherwise()`        | Default case         | `.Otherwise(...)`            |
 
 ## Error Handling
 

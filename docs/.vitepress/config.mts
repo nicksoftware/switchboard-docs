@@ -187,7 +187,8 @@ export default defineConfig({
               items: [
                 { text: 'CheckContactAttribute', link: '/reference/building-blocks/check/check-contact-attribute' },
                 { text: 'CheckHoursOfOperation', link: '/reference/building-blocks/check/check-hours-of-operation' },
-                { text: 'CheckStaffing', link: '/reference/building-blocks/check/check-staffing' }
+                { text: 'CheckStaffing', link: '/reference/building-blocks/check/check-staffing' },
+                { text: 'GetQueueMetrics', link: '/reference/building-blocks/check/get-queue-metrics' }
               ]
             },
             {
