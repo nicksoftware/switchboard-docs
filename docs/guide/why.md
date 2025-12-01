@@ -9,9 +9,9 @@ Switchboard is currently in **preview** (v0.1.0-preview.17). We're working towar
 ### 1. Console-First Development is Error-Prone
 
 Building contact flows in the AWS Console:
-- ❌ No version control
+
 - ❌ Manual testing required
-- ❌ Difficult to replicate across environments
+- ❌ Difficult to replicate across environments if you don't have a pipeline
 - ❌ No compile-time validation
 - ❌ Hard to collaborate with teams
 - ❌ Prone to human error
@@ -19,6 +19,7 @@ Building contact flows in the AWS Console:
 ### 2. JSON/CloudFormation is Verbose and Fragile
 
 Writing flows in JSON or CloudFormation:
+
 - ❌ Hundreds of lines of boilerplate
 - ❌ No IntelliSense or type safety
 - ❌ Easy to break with typos
@@ -60,6 +61,7 @@ public partial class ServiceFlow : FlowDefinitionBase
 ```
 
 **Benefits**:
+
 - IntelliSense and autocomplete
 - Compile-time error checking
 - Refactoring support
@@ -68,6 +70,7 @@ public partial class ServiceFlow : FlowDefinitionBase
 ### ✅ Version Control Everything
 
 Your entire contact center is **code in Git**:
+
 - Track every change with commits
 - Review changes with pull requests
 - Rollback problematic deployments
@@ -129,16 +132,16 @@ Deploy to dev, staging, and production with confidence.
 
 ## Comparison with Alternatives
 
-| Feature | Console | CloudFormation | Terraform | **Switchboard** |
-|---------|---------|----------------|-----------|-----------------|
-| **Version Control** | ❌ Manual | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Type Safety** | ❌ None | ⚠️ Limited | ⚠️ Limited | ✅ Full |
-| **IntelliSense** | ❌ No | ❌ No | ⚠️ Partial | ✅ Yes |
-| **Testing** | ❌ Manual | ⚠️ Difficult | ⚠️ Difficult | ✅ Easy |
-| **Runtime Updates** | ✅ Yes | ❌ No | ❌ No | ✅ Yes |
-| **Code Reuse** | ❌ No | ⚠️ Limited | ⚠️ Limited | ✅ Yes |
-| **Compile-Time Validation** | ❌ No | ❌ No | ❌ No | ✅ Yes |
-| **Learning Curve** | ⭐ Easy | ⭐⭐ Medium | ⭐⭐⭐ Hard | ⭐⭐ Medium |
+| Feature                     | Console   | CloudFormation | Terraform    | **Switchboard** |
+| --------------------------- | --------- | -------------- | ------------ | --------------- |
+| **Version Control**         | ❌ Manual | ✅ Yes         | ✅ Yes       | ✅ Yes          |
+| **Type Safety**             | ❌ None   | ⚠️ Limited     | ⚠️ Limited   | ✅ Full         |
+| **IntelliSense**            | ❌ No     | ❌ No          | ⚠️ Partial   | ✅ Yes          |
+| **Testing**                 | ❌ Manual | ⚠️ Difficult   | ⚠️ Difficult | ✅ Easy         |
+| **Runtime Updates**         | ✅ Yes    | ❌ No          | ❌ No        | ✅ Yes          |
+| **Code Reuse**              | ❌ No     | ⚠️ Limited     | ⚠️ Limited   | ✅ Yes          |
+| **Compile-Time Validation** | ❌ No     | ❌ No          | ❌ No        | ✅ Yes          |
+| **Learning Curve**          | ⭐ Easy   | ⭐⭐ Medium    | ⭐⭐⭐ Hard  | ⭐⭐ Medium     |
 
 ## Who Should Use Switchboard?
 
@@ -184,6 +187,7 @@ Deploy to dev, staging, and production with confidence.
 ### 1. Source Generators
 
 Framework generates boilerplate code at compile-time:
+
 - ✅ Write less code
 - ✅ Consistent implementations
 - ✅ Zero runtime overhead
@@ -191,6 +195,7 @@ Framework generates boilerplate code at compile-time:
 ### 2. Roslyn Analyzers
 
 Catch errors before deployment:
+
 - ✅ Validates queue references exist
 - ✅ Checks flow structure
 - ✅ Ensures proper action ordering
@@ -199,6 +204,7 @@ Catch errors before deployment:
 ### 3. Dependency Injection
 
 ASP.NET Core-style DI:
+
 - ✅ Testable components
 - ✅ Swappable implementations
 - ✅ Clean architecture
@@ -206,6 +212,7 @@ ASP.NET Core-style DI:
 ### 4. CDK Integration
 
 Built on AWS CDK:
+
 - ✅ CloudFormation under the hood
 - ✅ All AWS services supported
 - ✅ Infrastructure as real code
@@ -214,11 +221,13 @@ Built on AWS CDK:
 ## Cost Considerations
 
 You pay for AWS resources consumed:
+
 - Amazon Connect usage (per minute)
 - Lambda invocations (if using dynamic config)
 - DynamoDB storage (if using dynamic config)
 
 **Estimated monthly AWS cost** for small contact center:
+
 - Connect: $50-100/month
 - Lambda + DynamoDB: $5-10/month (if enabled)
 
