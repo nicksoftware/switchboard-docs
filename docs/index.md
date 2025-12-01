@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Switchboard
-  text: Code-First Contact Center Infrastructure
-  tagline: Build and manage Amazon Connect with AWS CDK and .NET - No more JSON wrestling
+  text: Code-First Contact Center Framework
+  tagline: Build and manage Amazon Connect Contact Centers with code
   actions:
     - theme: brand
       text: Get Started in 5 Minutes
