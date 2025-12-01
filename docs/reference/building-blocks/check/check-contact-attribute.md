@@ -6,45 +6,50 @@ Branch the flow based on contact attribute values. This is the primary method fo
 
 ```csharp
 IFlowBuilder CheckContactAttribute(
-    Action<CheckContactAttributeBuilder> configure, 
+    Action<CheckContactAttributeBuilder> configure,
     string? identifier = null)
 ```
 
 ## Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `configure` | `Action<CheckContactAttributeBuilder>` | Yes | Configure the attribute check |
-| `identifier` | `string?` | No | Optional identifier for the action |
+| Parameter    | Type                                   | Required | Description                        |
+| ------------ | -------------------------------------- | -------- | ---------------------------------- |
+| `configure`  | `Action<CheckContactAttributeBuilder>` | Yes      | Configure the attribute check      |
+| `identifier` | `string?`                              | No       | Optional identifier for the action |
 
 ## CheckContactAttributeBuilder Methods
 
-| Method | Description |
-|--------|-------------|
+| Method                           | Description                    |
+| -------------------------------- | ------------------------------ |
 | `.Attribute(AttributeReference)` | Specify the attribute to check |
 
 After calling `.Attribute()`, comparison methods become available:
 
-| Method | Description |
-|--------|-------------|
-| `.Equals(value, Action<IFlowBuilder>)` | Branch when attribute equals value |
-| `.Equals(bool, Action<IFlowBuilder>)` | Branch when attribute equals boolean |
-| `.NotEquals(value, Action<IFlowBuilder>)` | Branch when attribute doesn't equal value |
-| `.Contains(value, Action<IFlowBuilder>)` | Branch when attribute contains value |
-| `.GreaterThan(value, Action<IFlowBuilder>)` | Branch when attribute is greater than value |
-| `.LessThan(value, Action<IFlowBuilder>)` | Branch when attribute is less than value |
-| `.Otherwise(Action<IFlowBuilder>)` | Default branch when no conditions match |
+| Method                                     | Description                                    |
+| ------------------------------------------ | ---------------------------------------------- |
+| `.Equals(value, Action<IFlowBuilder>)`     | Branch with inline flow when equals value      |
+| `.Equals(value, string targetLabel)`       | Jump to labeled action when equals value       |
+| `.Equals(bool, Action<IFlowBuilder>)`      | Branch with inline flow when equals boolean    |
+| `.Equals(bool, string targetLabel)`        | Jump to labeled action when equals boolean     |
+| `.Equals(int, Action<IFlowBuilder>)`       | Branch with inline flow when equals number     |
+| `.Equals(int, string targetLabel)`         | Jump to labeled action when equals number      |
+| `.NotEquals(value, string targetLabel)`    | Jump to labeled action when not equal          |
+| `.Contains(substring, string targetLabel)` | Jump to labeled action when contains substring |
+| `.GreaterThan(value, string targetLabel)`  | Jump to labeled action when greater than value |
+| `.LessThan(value, string targetLabel)`     | Jump to labeled action when less than value    |
+| `.Otherwise(Action<IFlowBuilder>)`         | Default branch with inline flow                |
+| `.Otherwise(string targetLabel)`           | Jump to labeled action when no match           |
 
 ## AttributeReference Types
 
 Use the `Attributes` helper to reference attributes:
 
-| Method | Description | Example |
-|--------|-------------|---------|
-| `Attributes.Contact("name")` | User-defined attribute | `$.Attributes.CustomerTier` |
-| `Attributes.System(SystemAttributes.*)` | System attribute | `$.SystemEndpoint.Address` |
-| `Attributes.External("name")` | Lambda response attribute | `$.External.StatusCode` |
-| `Attributes.Lex("slotName")` | Lex bot slot | `$.Lex.Slots.ProductType` |
+| Method                                  | Description               | Example                     |
+| --------------------------------------- | ------------------------- | --------------------------- |
+| `Attributes.Contact("name")`            | User-defined attribute    | `$.Attributes.CustomerTier` |
+| `Attributes.System(SystemAttributes.*)` | System attribute          | `$.SystemEndpoint.Address`  |
+| `Attributes.External("name")`           | Lambda response attribute | `$.External.StatusCode`     |
+| `Attributes.Lex("slotName")`            | Lex bot slot              | `$.Lex.Slots.ProductType`   |
 
 ## Examples
 
@@ -153,6 +158,52 @@ Flow.Create("Multi-Language Flow")
                 .TransferToQueue("EnglishSupport"));
     });
 ```
+
+### Label-Based Targeting (Flat Flow Structure)
+
+Use label-based targeting when you prefer a flat flow structure or need to reference actions defined elsewhere in the flow:
+
+```csharp
+Flow.Create("Customer Input Router")
+    .GetCustomerInput("Press 1 for Sales, 2 for Support, 3 for Billing.")
+        .OnTimeout(timeout => timeout.Disconnect())
+        .OnError(error => error.Disconnect())
+        .OnDefault(def => def.Disconnect())
+
+    // Route based on stored input using labels
+    .CheckContactAttribute(check => check
+        .Attribute("$.StoredCustomerInput")
+        .Equals("1", "sales-handler")
+        .Equals("2", "support-handler")
+        .Equals("3", "billing-handler")
+        .Otherwise("invalid-handler"))
+
+    // Labeled handlers
+    .JoinPoint("sales-handler")
+    .PlayPrompt("Transferring to Sales.")
+    .TransferToQueue("Sales")
+    .Disconnect()
+
+    .JoinPoint("support-handler")
+    .PlayPrompt("Transferring to Support.")
+    .TransferToQueue("Support")
+    .Disconnect()
+
+    .JoinPoint("billing-handler")
+    .PlayPrompt("Transferring to Billing.")
+    .TransferToQueue("Billing")
+    .Disconnect()
+
+    .JoinPoint("invalid-handler")
+    .PlayPrompt("Invalid selection. Goodbye.")
+    .Disconnect();
+```
+
+This approach is useful when:
+
+- Actions need to be shared across multiple branches
+- You want a flatter, more readable flow structure
+- You're migrating from legacy flow patterns
 
 ### Complex Multi-Condition Flow
 

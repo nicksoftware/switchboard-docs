@@ -7,33 +7,35 @@ Repeat a section of the flow a specified number of times.
 ```csharp
 // Static loop count
 ILoopBuilder Loop(
-    int loopCount, 
-    Action<ILoopBuilder> configure, 
+    int loopCount,
+    Action<ILoopBuilder> configure,
     string? identifier = null)
 
 // Dynamic loop count from attribute
 ILoopBuilder Loop(
-    AttributeReference loopCountAttribute, 
-    Action<ILoopBuilder> configure, 
+    AttributeReference loopCountAttribute,
+    Action<ILoopBuilder> configure,
     string? identifier = null)
 ```
 
 ## Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `loopCount` | `int` | Yes | Number of iterations |
-| `loopCountAttribute` | `AttributeReference` | Yes | Attribute containing loop count |
-| `configure` | `Action<ILoopBuilder>` | Yes | Configure loop behavior |
-| `identifier` | `string?` | No | Optional identifier (use with ContinueAt) |
+| Parameter            | Type                   | Required | Description                               |
+| -------------------- | ---------------------- | -------- | ----------------------------------------- |
+| `loopCount`          | `int`                  | Yes      | Number of iterations                      |
+| `loopCountAttribute` | `AttributeReference`   | Yes      | Attribute containing loop count           |
+| `configure`          | `Action<ILoopBuilder>` | Yes      | Configure loop behavior                   |
+| `identifier`         | `string?`              | No       | Optional identifier (use with ContinueAt) |
 
 ## ILoopBuilder Methods
 
-| Method | Description |
-|--------|-------------|
-| `.WhileLooping(Action<IFlowBuilder>)` | Actions to execute each iteration |
-| `.WhenDone(Action<IFlowBuilder>)` | Actions after all iterations complete |
-| `.LoopIdentifier` | Identifier for ContinueAt to restart loop |
+| Method                                | Description                                      |
+| ------------------------------------- | ------------------------------------------------ |
+| `.WhileLooping(Action<IFlowBuilder>)` | Configure inline actions for each iteration      |
+| `.WhileLooping(string targetLabel)`   | Jump to a labeled action on each iteration       |
+| `.WhenDone(Action<IFlowBuilder>)`     | Configure inline actions after loop completes    |
+| `.WhenDone(string targetLabel)`       | Jump to a labeled action after loop completes    |
+| `.LoopIdentifier`                     | Identifier for ContinueAt to restart loop        |
 
 ## Examples
 
@@ -64,7 +66,7 @@ Flow.Create("PIN Entry with Retry")
 ```csharp
 Flow.Create("Main Menu")
     .PlayPrompt("Welcome to Nick Software.", "MainMenu")
-    
+
     .Loop(3, mainMenuLoop => mainMenuLoop
         .WhileLooping(menuAttempt => menuAttempt
             .GetCustomerInput("Press 1 for Sales, 2 for Support.")
@@ -82,7 +84,7 @@ Flow.Create("Main Menu")
         .WhenDone(maxMenuAttempts => maxMenuAttempts
             .PlayPrompt("Goodbye.")
             .Disconnect()))
-    
+
     .Disconnect();
 ```
 
@@ -170,7 +172,7 @@ Flow.Create("Dynamic Retry")
             {
                 attrs["MaxRetries"] = "3";  // Default
             }))
-    
+
     // Use dynamic loop count
     .Loop(Attributes.Contact("MaxRetries"), loop => loop
         .WhileLooping(attempt => attempt
@@ -180,6 +182,40 @@ Flow.Create("Dynamic Retry")
             .ThenContinue())
         .WhenDone(done => done.Disconnect()));
 ```
+
+### Label-Based Targeting (Flat Flow Structure)
+
+Use label-based targeting when you prefer a flat flow structure or need to reference actions defined elsewhere:
+
+```csharp
+Flow.Create("Menu with Retry")
+    .PlayPrompt("Welcome to support.")
+
+    // Loop that targets labeled actions
+    .Loop(3, loop => loop
+        .WhileLooping("main-menu")      // Target: labeled GetCustomerInput
+        .WhenDone("max-attempts"))      // Target: labeled goodbye prompt
+
+    // Main menu input (target of WhileLooping)
+    .GetCustomerInput("Press 1 for Sales, 2 for Support.", "main-menu")
+        .OnDigit("1", sales => sales
+            .TransferToQueue("Sales")
+            .Disconnect())
+        .OnDigit("2", support => support
+            .TransferToQueue("Support")
+            .Disconnect())
+        .OnDefault(invalid => invalid
+            .PlayPrompt("Invalid selection. Please try again."))
+        .OnTimeout(timeout => timeout
+            .PlayPrompt("No input received."))
+
+    // Max attempts handler (target of WhenDone)
+    .JoinPoint("max-attempts")
+    .PlayPrompt("Maximum attempts reached. Goodbye.")
+    .Disconnect();
+```
+
+This is equivalent to the inline version but allows more flexibility in flow organization.
 
 ### Early Exit with ContinueAt
 
@@ -196,7 +232,7 @@ Flow.Create("Loop with Early Exit")
             .ThenContinue())
         .WhenDone(done => done
             .PlayPrompt("Service unavailable after all retries.")))
-    
+
     .JoinPoint("AfterLoop")
     .TransferToQueue("Support")
     .Disconnect();
@@ -239,7 +275,7 @@ private static void BuildAccountLookup(IFlowBuilder flow, string lambdaArn)
 // Usage
 Flow.Create("Account Verification")
     .Loop(3, loop => loop
-        .WhileLooping(attempt => 
+        .WhileLooping(attempt =>
             BuildAccountLookup(attempt, "arn:aws:lambda:..."))
         .WhenDone(maxAttempts => maxAttempts
             .PlayPrompt("Maximum attempts reached.")
