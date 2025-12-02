@@ -161,9 +161,8 @@ Deploy to dev, staging, and production with confidence.
 
 - Changes took **2-3 days** (dev → staging → prod)
 - **Frequent production bugs** from manual errors
-- **No audit trail** of who changed what
+- ** audit trail** of who changed what its possible to check but git blame is faster
 - **Testing was manual** and time-consuming
-- **Rollbacks required** manual console work
 
 ### After Switchboard
 
@@ -173,7 +172,7 @@ Deploy to dev, staging, and production with confidence.
 - **Automated testing** catches issues before deployment
 - **Instant rollbacks** with `git revert` + deploy
 
-**Result**: 90% reduction in deployment time, zero manual errors.
+**Result**: reduction in deployment time, zero manual errors.
 
 ## Technical Advantages
 
