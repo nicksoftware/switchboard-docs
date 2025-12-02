@@ -14,11 +14,16 @@ Think of it as an organizational chart - you can group agents by region, departm
 
 ### How User Hierarchies Work
 
-1. **Define hierarchy structure** → Create groups at different levels
-2. **Nest groups** → Child groups reference parent groups
-3. **Assign users** → Each agent belongs to one hierarchy group
-4. **Use for access control** → Security profiles can restrict access based on hierarchy
-5. **Use for reporting** → Filter metrics and reports by hierarchy
+1. **Define hierarchy structure** → Configure level names (Region, Country, Office, Team)
+2. **Create hierarchy groups** → Create groups within those defined levels
+3. **Nest groups** → Child groups reference parent groups
+4. **Assign users** → Each agent belongs to one hierarchy group
+5. **Use for access control** → Security profiles can restrict access based on hierarchy
+6. **Use for reporting** → Filter metrics and reports by hierarchy
+
+::: warning Important: Structure Before Groups
+Amazon Connect requires you to define the **hierarchy structure** (level names) BEFORE creating any hierarchy groups. The structure defines what each level is called (e.g., "Region", "Country", "Office", "Team"). This is a one-time configuration per Connect instance.
+:::
 
 ### When You Need User Hierarchies
 
@@ -32,9 +37,65 @@ Create user hierarchies whenever you want to:
 
 ---
 
+## Configuring the Hierarchy Structure
+
+Before creating any hierarchy groups, you must configure the **hierarchy structure** for your Connect instance. This defines the level names that appear in the Connect console.
+
+### Define Level Names
+
+Use the `UserHierarchyStructure` builder to configure your levels:
+
+```csharp
+// Configure a 4-level geographic hierarchy
+UserHierarchyStructure.Create()
+    .WithLevelOne("Region")      // Top level: North America, Europe, etc.
+    .WithLevelTwo("Country")     // Second level: USA, Canada, UK, etc.
+    .WithLevelThree("Office")    // Third level: NYC Office, SF Office, etc.
+    .WithLevelFour("Team")       // Fourth level: Sales Team, Support Team, etc.
+    .Build(stack);
+```
+
+### Structure Rules
+
+- **At least one level** is required
+- **Levels must be contiguous** - you can't skip from Level 1 to Level 3
+- **Maximum 5 levels** are supported
+- **Level names max 50 characters**
+- **One structure per Connect instance** - it's a singleton resource
+
+### Common Structure Patterns
+
+**Geographic (4 levels):**
+```csharp
+UserHierarchyStructure.Create()
+    .WithLevelOne("Region")
+    .WithLevelTwo("Country")
+    .WithLevelThree("Office")
+    .WithLevelFour("Team")
+    .Build(stack);
+```
+
+**Departmental (3 levels):**
+```csharp
+UserHierarchyStructure.Create()
+    .WithLevelOne("Division")
+    .WithLevelTwo("Department")
+    .WithLevelThree("Team")
+    .Build(stack);
+```
+
+**Simple (1 level):**
+```csharp
+UserHierarchyStructure.Create()
+    .WithLevelOne("Team")
+    .Build(stack);
+```
+
+---
+
 ## Creating Your First Hierarchy Group
 
-Let's build a simple hierarchy step-by-step.
+Now that you've configured the structure, let's create hierarchy groups.
 
 ### Step 1: Use UserHierarchyGroupBuilder
 
@@ -329,19 +390,47 @@ var regionalManager = SecurityProfile
 
 ## Using the Provider Pattern
 
-For larger projects, use the provider pattern to organize hierarchy creation:
+For larger projects, use the provider pattern to organize hierarchy creation. There are **two provider interfaces** for hierarchies:
+
+1. `IUserHierarchyStructureProvider` (Order = 170) - Configures level names
+2. `IUserHierarchyGroupProvider` (Order = 175) - Creates hierarchy groups
+
+### Structure Provider
+
+Configure level names first:
 
 ```csharp
-public class HierarchyResourceProvider : IUserHierarchyGroupProvider
+public class HierarchyStructureProvider : IUserHierarchyStructureProvider
+{
+    public int Order => 170; // Before hierarchy groups
+
+    public void ConfigureUserHierarchyStructure(ISwitchboardStack stack, SwitchboardOptions options)
+    {
+        UserHierarchyStructure.Create()
+            .WithLevelOne("Region")
+            .WithLevelTwo("Country")
+            .WithLevelThree("Office")
+            .WithLevelFour("Team")
+            .Build(stack);
+    }
+}
+```
+
+### Groups Provider
+
+Then create hierarchy groups:
+
+```csharp
+public class HierarchyGroupProvider : IUserHierarchyGroupProvider
 {
     private readonly IResourceRegistry _registry;
 
-    public HierarchyResourceProvider(IResourceRegistry registry)
+    public HierarchyGroupProvider(IResourceRegistry registry)
     {
         _registry = registry;
     }
 
-    public int Order => 175; // After Hours of Operation, before Queues
+    public int Order => 175; // After structure, before queues
 
     public void ConfigureUserHierarchyGroups(ISwitchboardStack stack, SwitchboardOptions options)
     {
@@ -362,9 +451,69 @@ public class HierarchyResourceProvider : IUserHierarchyGroupProvider
 }
 ```
 
+### Combined Provider
+
+You can implement both interfaces in one class:
+
+```csharp
+public class HierarchyResourceProvider : IUserHierarchyStructureProvider, IUserHierarchyGroupProvider
+{
+    private readonly IResourceRegistry _registry;
+
+    public HierarchyResourceProvider(IResourceRegistry registry)
+    {
+        _registry = registry;
+    }
+
+    public int Order => 0; // Order within same interface type
+
+    public void ConfigureUserHierarchyStructure(ISwitchboardStack stack, SwitchboardOptions options)
+    {
+        UserHierarchyStructure.Create()
+            .WithLevelOne("Region")
+            .WithLevelTwo("Country")
+            .WithLevelThree("Office")
+            .WithLevelFour("Team")
+            .Build(stack);
+    }
+
+    public void ConfigureUserHierarchyGroups(ISwitchboardStack stack, SwitchboardOptions options)
+    {
+        var northAmerica = UserHierarchyGroup.Create("North America")
+            .SetLevel(HierarchyLevel.LevelOne)
+            .Build(stack);
+
+        _registry.Register("NorthAmericaHierarchy", northAmerica);
+    }
+}
+```
+
 ---
 
 ## API Reference
+
+### UserHierarchyStructure Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `LevelOneName` | `string?` | Name for Level 1 (max 50 chars) |
+| `LevelTwoName` | `string?` | Name for Level 2 (max 50 chars) |
+| `LevelThreeName` | `string?` | Name for Level 3 (max 50 chars) |
+| `LevelFourName` | `string?` | Name for Level 4 (max 50 chars) |
+| `LevelFiveName` | `string?` | Name for Level 5 (max 50 chars) |
+| `LevelCount` | `int` | Number of configured levels (read-only) |
+
+### IUserHierarchyStructureBuilder Methods
+
+| Method | Description |
+|--------|-------------|
+| `WithLevelOne(string)` | Set Level 1 name (required) |
+| `WithLevelTwo(string)` | Set Level 2 name |
+| `WithLevelThree(string)` | Set Level 3 name |
+| `WithLevelFour(string)` | Set Level 4 name |
+| `WithLevelFive(string)` | Set Level 5 name |
+| `Build()` | Build the structure model |
+| `Build(ISwitchboardStack)` | Build and configure on stack |
 
 ### UserHierarchyGroup Properties
 
@@ -449,6 +598,34 @@ var group = UserHierarchyGroup.Create("L2 Support")
 
 ### Common Issues
 
+**Hierarchy structure not configured:**
+You must configure the hierarchy structure before creating any hierarchy groups.
+
+```csharp
+// This will throw an error if structure isn't configured
+var salesTeam = UserHierarchyGroup.Create("Sales Team").Build(stack);
+// Error: "User hierarchy structure must be configured before adding hierarchy groups"
+
+// Correct: Configure structure first
+UserHierarchyStructure.Create()
+    .WithLevelOne("Team")
+    .Build(stack);
+
+var salesTeam = UserHierarchyGroup.Create("Sales Team").Build(stack);
+```
+
+**Non-contiguous levels in structure:**
+Levels must be contiguous - you can't skip from Level 1 to Level 3.
+
+```csharp
+// This will throw a validation error
+UserHierarchyStructure.Create()
+    .WithLevelOne("Region")
+    .WithLevelThree("Team")  // Missing Level 2!
+    .Build(stack);
+// Error: "Hierarchy structure levels must be contiguous"
+```
+
 **Group name already exists:**
 Each hierarchy group name must be unique within your Connect instance.
 
@@ -472,6 +649,13 @@ var child = UserHierarchyGroup.Create("Child").SetParentGroup(parent).Build(stac
 
 **Too many levels:**
 Amazon Connect supports maximum 5 levels. Attempting to create a 6th level will fail.
+
+**Hierarchy deployment fails:**
+If hierarchy groups fail to deploy but other resources succeed, check:
+1. The hierarchy structure is configured before groups
+2. Level names don't exceed 50 characters
+3. Group names don't exceed 100 characters
+4. You haven't exceeded the 50 tag limit per resource
 
 ---
 
