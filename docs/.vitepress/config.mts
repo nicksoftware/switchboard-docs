@@ -152,6 +152,8 @@ export default defineConfig({
             { text: 'Queues', link: '/building/queues' },
             { text: 'Routing Profiles', link: '/building/routing-profiles' },
             { text: 'Hours of Operation', link: '/building/hours-of-operation' },
+            { text: 'User Hierarchies', link: '/building/user-hierarchies' },
+            { text: 'Security Profiles', link: '/building/security-profiles' },
             { text: 'Users (Agents)', link: '/building/users' },
             { text: 'Complete Example', link: '/building/complete-example' }
           ]
