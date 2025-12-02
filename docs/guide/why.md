@@ -12,7 +12,6 @@ Building contact flows in the AWS Console:
 
 - ❌ Manual testing required
 - ❌ Difficult to replicate across environments if you don't have a pipeline
-- ❌ No compile-time validation
 - ❌ Hard to collaborate with teams
 - ❌ Prone to human error
 
@@ -147,18 +146,12 @@ Deploy to dev, staging, and production with confidence.
 
 ### Perfect For
 
-✅ **DevOps teams** managing contact centers as infrastructure
-✅ **.NET developers** building telephony applications
-✅ **Enterprises** requiring version control and CI/CD
-✅ **Teams migrating** from console-managed to IaC
-✅ **Projects needing** runtime configuration flexibility
-✅ **Organizations with** multiple environments (dev/staging/prod)
-
-### Not Ideal For
-
-❌ **Teams without .NET experience** (use Console or CloudFormation)
-❌ **One-time setups** that won't change (Console is faster)
-❌ **Python/TypeScript-only shops** (this framework is C#)
+- ✅ **DevOps teams** managing contact centers as infrastructure
+- ✅ **Developers** building telephony applications
+- ✅ **Enterprises** requiring version control and CI/CD
+- ✅ **Teams migrating** from console-managed to IaC
+- ✅ **Projects needing** runtime configuration flexibility
+- ✅ **Organizations with** multiple environments (dev/staging/prod)
 
 ## Real-World Benefits
 

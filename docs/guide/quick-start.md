@@ -169,9 +169,10 @@ app.Synth();
 
 ```json
 {
-  "app": "dotnet run",
+  "app": "dotnet run --project ProjectName.csproj",
   "context": {
-    "@aws-cdk/core:checkSecretUsage": true
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:stackRelativeExports": true
   }
 }
 ```
