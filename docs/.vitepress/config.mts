@@ -154,6 +154,7 @@ export default defineConfig({
             { text: 'Hours of Operation', link: '/building/hours-of-operation' },
             { text: 'User Hierarchies', link: '/building/user-hierarchies' },
             { text: 'Security Profiles', link: '/building/security-profiles' },
+            { text: 'Quick Connects', link: '/building/quick-connects' },
             { text: 'Users (Agents)', link: '/building/users' },
             { text: 'Complete Example', link: '/building/complete-example' }
           ]
