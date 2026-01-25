@@ -253,6 +253,287 @@ QuickConnect
 
 ---
 
+## Quick Connect Presets
+
+Presets provide pre-configured defaults for common quick connect patterns. They set the name, description, and tags automatically, so you only need to provide the destination.
+
+### Available Presets
+
+| Preset | Default Name | Type | Description |
+|--------|--------------|------|-------------|
+| `EmergencyLine` | "Emergency Line" | Phone Number | Emergency hotline for critical escalations |
+| `MainOffice` | "Main Office" | Phone Number | Main office/reception line |
+| `ExternalVendor` | "External Vendor Support" | Phone Number | External vendor support |
+| `SupervisorTransfer` | "Call Supervisor" | User | Transfer to shift supervisor |
+| `QueueTransfer` | "Transfer to Queue" | Queue | Transfer to a queue |
+
+### Using Presets
+
+```csharp
+// Emergency line - preset provides name, description, and tags
+var emergency = QuickConnect.Create()
+    .UsePreset(QuickConnectPresets.EmergencyLine)
+    .ForPhoneNumber("+18005551234")
+    .Build(stack);
+
+// Main office using preset
+QuickConnect.Create()
+    .UsePreset(QuickConnectPresets.MainOffice)
+    .ForPhoneNumber("+18005555678")
+    .Build(stack);
+
+// Supervisor transfer preset
+QuickConnect.Create()
+    .UsePreset(QuickConnectPresets.SupervisorTransfer)
+    .ForUser("supervisor-user-id", transferToAgentFlow)
+    .Build(stack);
+
+// Queue transfer preset
+QuickConnect.Create()
+    .UsePreset(QuickConnectPresets.QueueTransfer)
+    .ForQueue(salesQueue, transferToQueueFlow)
+    .Build(stack);
+```
+
+### Overriding Preset Defaults
+
+You can override any preset default by setting it explicitly:
+
+```csharp
+// Override the preset name
+QuickConnect.Create("IT Helpdesk")  // Use custom name instead of "Main Office"
+    .UsePreset(QuickConnectPresets.MainOffice)
+    .ForPhoneNumber("+18005550000")
+    .AddTag("Department", "IT")  // Add additional tag
+    .Build(stack);
+```
+
+### Creating Custom Presets
+
+Create a custom preset for your organization's specific patterns:
+
+```csharp
+// Create a custom preset
+var vipHotlinePreset = QuickConnectPresets.Custom(
+    "VIP Hotline",
+    QuickConnectType.PhoneNumber,
+    "Priority hotline for VIP customers",
+    new Dictionary<string, string>
+    {
+        ["Priority"] = "Critical",
+        ["Type"] = "VIP"
+    });
+
+// Use the custom preset
+QuickConnect.Create()
+    .UsePreset(vipHotlinePreset)
+    .ForPhoneNumber("+18005550007")
+    .Build(stack);
+```
+
+---
+
+## Bulk Quick Connect Creation
+
+When creating multiple quick connects, use extension methods for cleaner code and better performance.
+
+### Adding Multiple Phone Number Quick Connects
+
+Create multiple phone number quick connects from a dictionary:
+
+```csharp
+// Bulk phone number quick connects
+stack.AddPhoneNumberQuickConnects(new Dictionary<string, string>
+{
+    ["Emergency Line"] = "+18005551234",
+    ["Main Office"] = "+18005555678",
+    ["Partner Support"] = "+18005550001",
+    ["Billing Department"] = "+18005550002",
+    ["HR Hotline"] = "+18005550003"
+});
+```
+
+### Adding Quick Connects with Custom Configuration
+
+Use tuples to configure each quick connect individually:
+
+```csharp
+stack.AddQuickConnects(
+    ("Emergency", b => b.ForPhoneNumber("+18005551234").AddTag("Priority", "Critical")),
+    ("Main Office", b => b.ForPhoneNumber("+18005555678").AddTag("Type", "Internal")),
+    ("VIP Hotline", b => b.ForPhoneNumber("+18005550004").AddTag("Priority", "High"))
+);
+```
+
+### Bulk Queue Quick Connects
+
+Create quick connects for multiple queues at once:
+
+```csharp
+// Auto-generates names as "Transfer to {QueueName}"
+stack.AddQueueQuickConnects(
+    transferToQueueFlow,
+    salesQueue,
+    supportQueue,
+    billingQueue
+);
+```
+
+With custom names:
+
+```csharp
+stack.AddQueueQuickConnects(
+    transferToQueueFlow,
+    (salesQueue, "Sales Team"),
+    (supportQueue, "Tech Support"),
+    (billingQueue, "Billing Dept")
+);
+```
+
+### Bulk User Quick Connects
+
+Create quick connects for multiple users:
+
+```csharp
+stack.AddUserQuickConnects(
+    transferToAgentFlow,
+    new Dictionary<string, string>
+    {
+        ["Call Supervisor"] = "supervisor-user-id",
+        ["Team Lead"] = "team-lead-user-id",
+        ["Escalation Manager"] = "escalation-manager-id"
+    });
+```
+
+### Adding Pre-built Quick Connect Objects
+
+If you have pre-built `QuickConnect` objects:
+
+```csharp
+var quickConnects = new[]
+{
+    QuickConnect.Create("Emergency").ForPhoneNumber("+18005551234").Build(),
+    QuickConnect.Create("Main Office").ForPhoneNumber("+18005555678").Build()
+};
+
+stack.AddQuickConnects(quickConnects);
+```
+
+---
+
+## Queue Association (CDK Custom Resource)
+
+Quick connects must be **associated with queues** to appear in the agent's Contact Control Panel (CCP). Switchboard provides a CDK custom resource to handle this automatically.
+
+### Associating Quick Connects with Queues
+
+Using construct references:
+
+```csharp
+// Create quick connects
+var emergencyQc = QuickConnect.Create("Emergency")
+    .ForPhoneNumber("+18005551234")
+    .Build(stack);
+
+var mainOfficeQc = QuickConnect.Create("Main Office")
+    .ForPhoneNumber("+18005555678")
+    .Build(stack);
+
+// Associate with the Sales queue
+// Agents working Sales queue will see these quick connects in their CCP
+stack.AssociateQuickConnectsWithQueue(
+    salesQueue,
+    emergencyQc,
+    mainOfficeQc
+);
+```
+
+Using names:
+
+```csharp
+// Associate using resource names
+stack.AssociateQuickConnectsWithQueue(
+    "Support",              // Queue name
+    "Emergency Line",       // Quick connect names
+    "Main Office",
+    "External Vendor Support"
+);
+```
+
+### How It Works
+
+The `AssociateQuickConnectsWithQueue` method creates an AWS Custom Resource that:
+
+1. **On Create**: Calls `AssociateQueueQuickConnects` API
+2. **On Update**: Re-associates quick connects if the list changes
+3. **On Delete**: Calls `DisassociateQueueQuickConnects` to clean up
+
+This ensures quick connects are properly associated during CDK deployment and removed on stack deletion.
+
+### IAM Permissions
+
+The custom resource automatically creates the required IAM permissions:
+
+- `connect:AssociateQueueQuickConnects`
+- `connect:DisassociateQueueQuickConnects`
+- `connect:ListQueueQuickConnects`
+
+### Complete Example
+
+```csharp
+public void ConfigureQuickConnects(ISwitchboardStack stack, SwitchboardOptions options)
+{
+    // Get queues
+    var salesQueue = _registry.Get<QueueConstruct>("SalesQueue");
+    var supportQueue = _registry.Get<QueueConstruct>("SupportQueue");
+
+    // Create quick connects using presets
+    var emergencyQc = QuickConnect.Create()
+        .UsePreset(QuickConnectPresets.EmergencyLine)
+        .ForPhoneNumber("+18005551234")
+        .Build(stack);
+
+    var mainOfficeQc = QuickConnect.Create()
+        .UsePreset(QuickConnectPresets.MainOffice)
+        .ForPhoneNumber("+18005555678")
+        .Build(stack);
+
+    // Bulk create phone number quick connects
+    stack.AddPhoneNumberQuickConnects(new Dictionary<string, string>
+    {
+        ["Partner Support"] = "+18005550001",
+        ["Billing"] = "+18005550002"
+    });
+
+    // Create queue quick connects (if transfer flow exists)
+    var transferFlow = stack.GetFlow("TransferToQueue");
+    if (transferFlow != null)
+    {
+        stack.AddQueueQuickConnects(transferFlow, salesQueue, supportQueue);
+    }
+
+    // Associate quick connects with queues
+    // Sales agents see: Emergency, Main Office, Transfer to Support
+    stack.AssociateQuickConnectsWithQueue(
+        salesQueue,
+        emergencyQc,
+        mainOfficeQc);
+
+    stack.AssociateQuickConnectsWithQueue(
+        "Sales",
+        "Transfer to Support");
+
+    // Support agents see: Emergency, Main Office, Transfer to Sales
+    stack.AssociateQuickConnectsWithQueue(
+        "Support",
+        "Emergency Line",
+        "Main Office",
+        "Transfer to Sales");
+}
+```
+
+---
+
 ## Using the Provider Pattern
 
 For larger contact centers, use the `IQuickConnectProvider` interface to organize quick connect creation:
@@ -463,8 +744,9 @@ public class CallCenterResources : IQuickConnectProvider
 
 | Method | Description |
 |--------|-------------|
-| `SetName(string)` | Sets the quick connect name (required) |
+| `SetName(string)` | Sets the quick connect name (required unless using preset) |
 | `SetDescription(string)` | Sets the description (max 250 chars) |
+| `UsePreset(IQuickConnectPreset)` | Applies a preset configuration (name, description, tags) |
 | `ForPhoneNumber(string)` | Configures as phone number type |
 | `ForUser(string, string)` | Configures as user type (userId, flowArn) |
 | `ForUser(string, FlowConstruct)` | Configures as user type with flow construct |
@@ -473,6 +755,19 @@ public class CallCenterResources : IQuickConnectProvider
 | `AddTag(string, string)` | Adds a resource tag |
 | `Build()` | Builds the QuickConnect model |
 | `Build(ISwitchboardStack)` | Builds and adds to stack |
+
+## Extension Methods
+
+| Method | Description |
+|--------|-------------|
+| `AddQuickConnects(IEnumerable<QuickConnect>)` | Adds multiple pre-built quick connects |
+| `AddQuickConnects(params (string, Action<QuickConnectBuilder>)[])` | Adds multiple quick connects with configuration |
+| `AddPhoneNumberQuickConnects(IDictionary<string, string>)` | Creates phone number quick connects from name→number dictionary |
+| `AddQueueQuickConnects(FlowConstruct, params QueueConstruct[])` | Creates queue quick connects with auto-generated names |
+| `AddQueueQuickConnects(FlowConstruct, params (QueueConstruct, string)[])` | Creates queue quick connects with custom names |
+| `AddUserQuickConnects(FlowConstruct, IDictionary<string, string>)` | Creates user quick connects from name→userId dictionary |
+| `AssociateQuickConnectsWithQueue(QueueConstruct, params QuickConnectConstruct[])` | Associates quick connects with queue (constructs) |
+| `AssociateQuickConnectsWithQueue(string, params string[])` | Associates quick connects with queue (names) |
 
 ---
 
@@ -491,20 +786,24 @@ public class CallCenterResources : IQuickConnectProvider
 
 ### Queue Association
 
-Quick connects must be **associated with queues** to appear in the agent's CCP. This association is done via the `AssociateQueueQuickConnects` API, which is not supported in CloudFormation.
+Quick connects must be **associated with queues** to appear in the agent's CCP. Switchboard provides built-in support for this via a CDK custom resource:
 
-Options for queue association:
-1. **Manual**: Use AWS Console to associate quick connects with queues
-2. **Custom Resource**: Create a CDK custom resource to call the API
-3. **Post-deployment script**: Use AWS CLI or SDK after deployment
+```csharp
+// Recommended: Use the built-in AssociateQuickConnectsWithQueue method
+stack.AssociateQuickConnectsWithQueue(salesQueue, emergencyQc, mainOfficeQc);
 
-```bash
-# Example: Associate quick connect with queue using AWS CLI
-aws connect associate-queue-quick-connects \
-    --instance-id your-instance-id \
-    --queue-id your-queue-id \
-    --quick-connect-ids quick-connect-id-1 quick-connect-id-2
+// Or use names
+stack.AssociateQuickConnectsWithQueue("Support", "Emergency Line", "Main Office");
 ```
+
+This automatically calls the `AssociateQueueQuickConnects` API during deployment and cleans up on stack deletion.
+
+::: tip Alternative Methods
+If you prefer manual control, you can also use:
+- **AWS Console**: Users → Quick Connects → Edit Queue Associations
+- **AWS CLI**: `aws connect associate-queue-quick-connects`
+- **SDK**: Connect API's `AssociateQueueQuickConnects` method
+:::
 
 ### Transfer Flows
 
